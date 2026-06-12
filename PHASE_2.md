@@ -1,6 +1,6 @@
 # Phase 2 — Intelligence: Score & Alert
 
-> **Goal:** Turn raw price data into ranked deal scores and fire alerts through ntfy and Discord when something clears your configured threshold. Daily digest mode for less urgent deals.
+> **Goal:** Turn raw price data into ranked deal scores and fire alerts via [apprise](https://github.com/caronc/apprise) — Discord is the primary channel, with ntfy, email, and 100+ other services available through the same config — when something clears your configured threshold. Daily digest mode for less urgent deals.
 
 **Estimated effort:** 1–2 weekends  
 **Depends on:** Phase 1 (needs price history to calculate real discounts)  
@@ -11,14 +11,15 @@
 ## Deliverables
 
 - [ ] `criteria.yaml` schema + Pydantic config loader
+- [ ] `.env`-based secrets via pydantic-settings (Discord webhook URL, ntfy URL, etc.)
 - [ ] Deal scoring engine (weighted formula, 0–100 score)
 - [ ] 90-day rolling average calculator (real discount vs retailer "was" price)
-- [ ] ntfy alert module
-- [ ] Discord webhook alert module
+- [ ] apprise-based notification module — Discord primary, ntfy/email/Slack/etc. as additional targets
+- [ ] Alert messages link to both the retailer product page and the Phase 4 dashboard
 - [ ] Daily digest builder (sorted by score, top N deals)
 - [ ] Immediate alert mode for high-score deals
-- [ ] EOFY / sale calendar awareness (threshold modifier)
-- [ ] Dry-run CLI for testing scoring without sending alerts
+- [ ] EOFY / Boxing Day / Easter sale calendar awareness (threshold modifier, Easter date computed via `dateutil`)
+- [ ] Dry-run CLI (`src.cli score`) using typer + rich
 
 ---
 
@@ -32,21 +33,9 @@ alerts:
   immediate_threshold: 85       # Score at or above this fires immediately (bypass digest)
   digest_time: "08:00"          # Daily digest send time (AEST)
   digest_max_deals: 10          # Max deals to include in daily digest
-  channels:
-    ntfy:
-      enabled: true
-      url: "https://ntfy.yourdomain.com"
-      topic: "bottlebot-deals"
-      priority: 3               # ntfy priority 1-5
-    discord:
-      enabled: true
-      webhook_url: "https://discord.com/api/webhooks/YOUR_WEBHOOK"
-    email:
-      enabled: false
-      smtp_host: "smtp.gmail.com"
-      smtp_port: 587
-      from_addr: "you@gmail.com"
-      to_addr: "you@gmail.com"
+
+web:
+  base_url: "http://localhost:8080"   # Phase 4 dashboard URL — used to build "View on BottleBot" links in alerts
 
 scoring:
   weights:
@@ -98,39 +87,55 @@ brands:
   allowlist: []                 # Empty = all brands (except blocklist)
 ```
 
+### Notification secrets (`.env`)
+
+Webhook URLs and tokens are secrets and don't belong in `criteria.yaml`. BottleBot loads them from
+a `.env` file (gitignored) via `pydantic-settings`.
+
+```python
+# src/config/settings.py
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Settings(BaseSettings):
+    """Secrets loaded from .env — never committed to git."""
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="BOTTLEBOT_", extra="ignore")
+
+    # Discord webhook, in apprise's native format: discord://<webhook_id>/<webhook_token>
+    # (take the id/token pair from the webhook URL Discord gives you)
+    discord_webhook_url: str = ""
+
+    # Optional extra apprise targets, e.g. ntfy://ntfy.sh/bottlebot-deals
+    ntfy_url: str = ""
+
+    # BWS internal API key (Phase 3) — extracted from their frontend JS bundle
+    bws_subscription_key: str = ""
+```
+
+```bash
+# .env.example — copy to .env, fill in, and keep .env out of git
+BOTTLEBOT_DISCORD_WEBHOOK_URL=discord://123456789012345678/AbCdEfGhIjKlMnOpQrStUvWxYz
+BOTTLEBOT_NTFY_URL=ntfy://ntfy.sh/bottlebot-deals
+BOTTLEBOT_BWS_SUBSCRIPTION_KEY=
+```
+
 ---
 
 ## 2. Config loader
 
 ```python
-# bottlebot/scoring/criteria.py
+# src/scoring/criteria.py
 from pathlib import Path
 from pydantic import BaseModel, Field
 import yaml
-
-class ChannelConfig(BaseModel):
-    enabled: bool = False
-
-class NtfyConfig(ChannelConfig):
-    url: str = ""
-    topic: str = "bottlebot-deals"
-    priority: int = 3
-
-class DiscordConfig(ChannelConfig):
-    webhook_url: str = ""
-
-class EmailConfig(ChannelConfig):
-    smtp_host: str = ""
-    smtp_port: int = 587
-    from_addr: str = ""
-    to_addr: str = ""
 
 class AlertsConfig(BaseModel):
     min_deal_score: float = 65
     immediate_threshold: float = 85
     digest_time: str = "08:00"
     digest_max_deals: int = 10
-    channels: dict = Field(default_factory=dict)
+
+class WebConfig(BaseModel):
+    base_url: str = "http://localhost:8080"
 
 class ScoringWeights(BaseModel):
     real_discount_pct: float = 0.35
@@ -162,6 +167,7 @@ class BrandsConfig(BaseModel):
 
 class Criteria(BaseModel):
     alerts: AlertsConfig = Field(default_factory=AlertsConfig)
+    web: WebConfig = Field(default_factory=WebConfig)
     scoring: ScoringConfig = Field(default_factory=ScoringConfig)
     categories: dict[str, float] = Field(default_factory=dict)
     thresholds: Thresholds = Field(default_factory=Thresholds)
@@ -194,7 +200,7 @@ final_score = min(100, base_score + modifiers)
 ```
 
 ```python
-# bottlebot/scoring/engine.py
+# src/scoring/engine.py
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from sqlalchemy import func
@@ -409,143 +415,133 @@ class ScoringEngine:
 ## 4. Sale calendar
 
 ```python
-# bottlebot/calendar.py
-from datetime import date
+# src/calendar.py
+from datetime import date, timedelta
+from dateutil.easter import easter
 
-SALE_WINDOWS = [
-    # (label, month, day_start, day_end)
-    ("EOFY",        6,  15, 30),
-    ("Boxing Day",  12, 26, 31),
-    ("New Year",    1,  1,  7),
-    ("Easter",      4,  1,  10),   # Approximate; Easter is moveable
-    ("Click Frenzy",11, 10, 14),
+# Fixed-date sale windows: (label, month, day_start, day_end)
+FIXED_SALE_WINDOWS = [
+    ("EOFY",         6,  15, 30),
+    ("Boxing Day",   12, 26, 31),
+    ("New Year",     1,   1,  7),
+    ("Click Frenzy", 11,  10, 14),
 ]
 
+# Easter is a moveable feast — compute it per-year with dateutil rather than
+# hardcoding a date range. Window covers the lead-up through the long weekend.
+EASTER_LEAD_DAYS = 4     # Sale window starts this many days before Good Friday
+EASTER_TRAIL_DAYS = 1    # ...and ends this many days after Easter Monday
+
 class SaleCalendar:
+    def _easter_window(self, year: int) -> tuple[date, date]:
+        sunday = easter(year)
+        good_friday = sunday - timedelta(days=2)
+        easter_monday = sunday + timedelta(days=1)
+        return good_friday - timedelta(days=EASTER_LEAD_DAYS), easter_monday + timedelta(days=EASTER_TRAIL_DAYS)
+
     def is_sale_window(self, d: date | None = None) -> bool:
-        d = d or date.today()
-        for label, month, start, end in SALE_WINDOWS:
-            if d.month == month and start <= d.day <= end:
-                return True
-        return False
+        return self.current_window(d) is not None
 
     def current_window(self, d: date | None = None) -> str | None:
         d = d or date.today()
-        for label, month, start, end in SALE_WINDOWS:
+        for label, month, start, end in FIXED_SALE_WINDOWS:
             if d.month == month and start <= d.day <= end:
                 return label
+
+        start, end = self._easter_window(d.year)
+        if start <= d <= end:
+            return "Easter"
         return None
 ```
 
 ---
 
-## 5. Alert modules
+## 5. Alert module
 
-### ntfy
+A single `notify.py` module wraps [apprise](https://github.com/caronc/apprise), which gives one
+interface to Discord, ntfy, email, Slack, Telegram, and 100+ other services. Discord is the
+primary target. Every alert links to both the retailer's product page (to buy) and the BottleBot
+dashboard from Phase 4 (to see the price history chart and cross-retailer comparison).
 
 ```python
-# bottlebot/alerts/ntfy.py
-import httpx
+# src/alerts/notify.py
+import apprise
+from ..config.settings import Settings
 from ..scoring.engine import DealScore
 
-def send_ntfy_alert(deal: DealScore, ntfy_url: str, topic: str, priority: int = 3):
-    title = f"{'🔥 ' if deal.score >= 85 else '🍺 '}Deal: {deal.product_name}"
-    body_lines = [
-        f"${deal.current_price:.2f} — {deal.real_discount_pct:.0f}% off 90d avg (was ${deal.avg_90d_price:.2f})",
-        f"Score: {deal.score}/100",
+def build_message(deal: DealScore, base_url: str) -> tuple[str, str]:
+    """Build a (title, markdown body) pair for a single deal."""
+    title = f"{'🔥' if deal.score >= 85 else '🍺'} {deal.product_name}"
+
+    lines = [
+        f"**${deal.current_price:.2f}** — {deal.real_discount_pct:.0f}% off 90-day avg "
+        f"(was ${deal.avg_90d_price:.2f})",
+        f"Score: **{deal.score}/100**",
     ]
     if deal.cpl_aud:
-        body_lines.append(f"${deal.cpl_aud:.2f}/L")
+        lines.append(f"${deal.cpl_aud:.2f}/L")
     if deal.is_watchlist:
-        body_lines.append("⭐ Watchlist item")
+        lines.append("⭐ Watchlist item")
     if deal.is_new_low:
-        body_lines.append("📉 All-time low price")
+        lines.append("📉 All-time low price")
     if deal.bulk_saving_12 > 0:
-        body_lines.append(f"Buy 12 → save ${deal.bulk_saving_12:.0f}")
-    body_lines.append(deal.url)
+        lines.append(f"Buy 12 → save ${deal.bulk_saving_12:.0f}")
 
-    httpx.post(
-        f"{ntfy_url}/{topic}",
-        data="\n".join(body_lines),
-        headers={
-            "Title": title,
-            "Priority": str(priority),
-            "Tags": "beers" if deal.score < 85 else "fire,beers",
-            "Click": deal.url,
-        },
-        timeout=10,
-    )
+    dashboard_url = f"{base_url}/deals/{deal.retailer_product_id}"
+    lines.append(f"\n[Buy at {deal.retailer.title()}]({deal.url}) · [View on BottleBot]({dashboard_url})")
+
+    return title, "\n".join(lines)
+
+def build_apprise(settings: Settings) -> apprise.Apprise:
+    """Assemble notification targets from .env-sourced settings."""
+    apobj = apprise.Apprise()
+    if settings.discord_webhook_url:
+        apobj.add(settings.discord_webhook_url, tag=["immediate", "digest"])
+    if settings.ntfy_url:
+        apobj.add(settings.ntfy_url, tag=["digest"])
+    return apobj
+
+def send_alert(apobj: apprise.Apprise, deal: DealScore, base_url: str, tag: str = "immediate"):
+    title, body = build_message(deal, base_url)
+    apobj.notify(title=title, body=body, body_format=apprise.NotifyFormat.MARKDOWN, tag=tag)
 ```
 
-### Discord
-
-```python
-# bottlebot/alerts/discord.py
-import httpx
-from ..scoring.engine import DealScore
-
-def send_discord_alert(deal: DealScore, webhook_url: str):
-    color = 0xFF6B35 if deal.score >= 85 else 0x5BCAA5   # orange = hot, teal = good
-    embed = {
-        "title": deal.product_name,
-        "url": deal.url,
-        "color": color,
-        "fields": [
-            {"name": "Price",     "value": f"**${deal.current_price:.2f}**", "inline": True},
-            {"name": "Real disc", "value": f"{deal.real_discount_pct:.0f}% off 90d avg", "inline": True},
-            {"name": "Score",     "value": f"{deal.score}/100", "inline": True},
-        ],
-        "footer": {"text": f"{deal.retailer} · {deal.promo_label or 'On sale'}"},
-    }
-    if deal.cpl_aud:
-        embed["fields"].append({"name": "$/L", "value": f"${deal.cpl_aud:.2f}", "inline": True})
-    if deal.is_new_low:
-        embed["fields"].append({"name": "📉", "value": "All-time low", "inline": True})
-    if deal.bulk_saving_12:
-        embed["fields"].append({"name": "Buy 12", "value": f"Save ${deal.bulk_saving_12:.0f}", "inline": True})
-
-    httpx.post(webhook_url, json={"embeds": [embed]}, timeout=10)
-```
+> **Adding more channels:** any [apprise URL](https://github.com/caronc/apprise/wiki) works — Slack
+> (`slack://...`), Telegram (`tgram://...`), email (`mailtos://...`), Pushover, and dozens more.
+> Add a field to `Settings`, then `apobj.add(...)` it in `build_apprise()` with the right tag(s).
 
 ---
 
 ## 6. Daily digest
 
 ```python
-# bottlebot/alerts/digest.py
-from .ntfy import send_ntfy_alert
-from .discord import send_discord_alert
+# src/alerts/digest.py
+import apprise
 from ..scoring.engine import DealScore
 from ..scoring.criteria import Criteria
 
-def send_digest(deals: list[DealScore], criteria: Criteria):
-    """Send top N deals as a daily digest. Immediate alerts are sent separately."""
-    cfg = criteria.alerts
-    top = deals[:cfg.digest_max_deals]
+def send_digest(apobj: apprise.Apprise, deals: list[DealScore], criteria: Criteria):
+    """Send the top N deals as a single daily digest notification."""
+    top = deals[:criteria.alerts.digest_max_deals]
+    if not top:
+        return
 
-    ntfy_cfg = cfg.channels.get("ntfy", {})
-    discord_cfg = cfg.channels.get("discord", {})
+    base_url = criteria.web.base_url
+    lines = [f"**BottleBot Daily Digest — Top {len(top)} deals**\n"]
+    for i, d in enumerate(top, 1):
+        dashboard_url = f"{base_url}/deals/{d.retailer_product_id}"
+        lines.append(
+            f"{i}. **{d.product_name}** — ${d.current_price:.2f} · "
+            f"{d.real_discount_pct:.0f}% off · Score {d.score}\n"
+            f"   [Buy at {d.retailer.title()}]({d.url}) · [View on BottleBot]({dashboard_url})"
+        )
 
-    # ntfy: one message per deal in digest
-    if ntfy_cfg.get("enabled"):
-        for deal in top:
-            send_ntfy_alert(
-                deal,
-                ntfy_url=ntfy_cfg["url"],
-                topic=ntfy_cfg["topic"] + "-digest",
-                priority=2,   # Lower priority for digest
-            )
-
-    # Discord: single embed list
-    if discord_cfg.get("enabled") and top:
-        lines = [f"**BottleBot Daily Digest — Top {len(top)} deals**\n"]
-        for i, d in enumerate(top, 1):
-            lines.append(
-                f"{i}. [{d.product_name}]({d.url}) — "
-                f"${d.current_price:.2f} · {d.real_discount_pct:.0f}% off · Score {d.score}"
-            )
-        import httpx
-        httpx.post(discord_cfg["webhook_url"], json={"content": "\n".join(lines)}, timeout=10)
+    apobj.notify(
+        title="BottleBot Daily Digest",
+        body="\n".join(lines),
+        body_format=apprise.NotifyFormat.MARKDOWN,
+        tag="digest",
+    )
 ```
 
 ---
@@ -553,23 +549,23 @@ def send_digest(deals: list[DealScore], criteria: Criteria):
 ## 7. Wiring it together
 
 ```python
-# bottlebot/run_scoring.py
+# src/run_scoring.py
 """Run after each scrape. Called by scheduler or CLI."""
 import logging
+import time
 from sqlalchemy.orm import Session
-from .db.models import Base
 from sqlalchemy import create_engine
 from .scoring.engine import ScoringEngine
 from .scoring.criteria import load_criteria
-from .alerts.ntfy import send_ntfy_alert
-from .alerts.discord import send_discord_alert
-from .alerts.digest import send_digest
+from .config.settings import Settings
+from .alerts.notify import build_apprise, send_alert
 
 log = logging.getLogger(__name__)
 
 def run_scoring(db_path: str = "bottlebot.db", criteria_path: str = "config/criteria.yaml"):
     engine = create_engine(f"sqlite:///{db_path}")
     criteria = load_criteria(criteria_path)
+    apobj = build_apprise(Settings())
 
     with Session(engine) as session:
         scorer = ScoringEngine(session, criteria)
@@ -577,22 +573,16 @@ def run_scoring(db_path: str = "bottlebot.db", criteria_path: str = "config/crit
 
     log.info(f"Scored {len(deals)} deals above threshold {criteria.alerts.min_deal_score}")
 
-    ntfy_cfg = criteria.alerts.channels.get("ntfy", {})
-    discord_cfg = criteria.alerts.channels.get("discord", {})
-
     immediate = [d for d in deals if d.score >= criteria.alerts.immediate_threshold]
     digest = [d for d in deals if d.score < criteria.alerts.immediate_threshold]
 
     # Fire immediately for hot deals
     for deal in immediate:
         log.info(f"Immediate alert: {deal.product_name} ({deal.score})")
-        if ntfy_cfg.get("enabled"):
-            send_ntfy_alert(deal, ntfy_cfg["url"], ntfy_cfg["topic"], priority=5)
-        if discord_cfg.get("enabled"):
-            send_discord_alert(deal, discord_cfg["webhook_url"])
+        send_alert(apobj, deal, criteria.web.base_url, tag="immediate")
+        time.sleep(0.5)   # be polite to self-hosted ntfy/Discord rate limits
 
-    # Digest goes out at scheduled time (separate cron job)
-    # This function just returns the digest list for the scheduler to hold
+    # Digest goes out at criteria.alerts.digest_time (separate scheduled job calls send_digest)
     return {"immediate": immediate, "digest": digest}
 ```
 
@@ -600,15 +590,73 @@ def run_scoring(db_path: str = "bottlebot.db", criteria_path: str = "config/crit
 
 ## 8. Dry-run CLI
 
-```bash
-# Test scoring without sending alerts
-python -m bottlebot.run_scoring --dry-run --top 20
+A small [typer](https://typer.tiangolo.com/) app with [rich](https://rich.readthedocs.io/) table
+output — score the current deal set and print a ranked table without sending any notifications.
 
-# Output:
-# Rank  Score  Discount  $/L    Product
-#  1    92.4   38% off   $42/L  Johnnie Walker Black 700mL — Dan Murphy's $38
-#  2    81.0   31% off   $21/L  Penfolds Bin 389 2021 — BWS $46
-#  ...
+```python
+# src/cli.py
+import typer
+from rich.console import Console
+from rich.table import Table
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+from .scoring.engine import ScoringEngine
+from .scoring.criteria import load_criteria
+
+app = typer.Typer(help="BottleBot CLI")
+console = Console()
+
+@app.command()
+def score(
+    db_path: str = typer.Option("bottlebot.db", help="Path to SQLite database"),
+    criteria_path: str = typer.Option("config/criteria.yaml", help="Path to criteria config"),
+    top: int = typer.Option(20, help="Number of deals to show"),
+):
+    """Score current deals and print a ranked table — no alerts are sent."""
+    engine = create_engine(f"sqlite:///{db_path}")
+    criteria = load_criteria(criteria_path)
+
+    with Session(engine) as session:
+        scorer = ScoringEngine(session, criteria)
+        deals = scorer.score_all_current_deals()
+
+    table = Table(title=f"Top {min(top, len(deals))} deals")
+    table.add_column("Rank", justify="right")
+    table.add_column("Score", justify="right")
+    table.add_column("Discount", justify="right")
+    table.add_column("$/L", justify="right")
+    table.add_column("Product")
+    table.add_column("Retailer")
+    table.add_column("Price", justify="right")
+
+    for i, d in enumerate(deals[:top], 1):
+        table.add_row(
+            str(i),
+            f"{d.score:.1f}",
+            f"{d.real_discount_pct:.0f}%",
+            f"${d.cpl_aud:.2f}" if d.cpl_aud else "—",
+            d.product_name,
+            d.retailer.title(),
+            f"${d.current_price:.2f}",
+        )
+
+    console.print(table)
+
+if __name__ == "__main__":
+    app()
+```
+
+```bash
+# Score the current deal set without sending any alerts
+python -m src.cli score --top 20
+
+#         Top 20 deals
+# ┏━━━━━━┳━━━━━━━┳━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━┓
+# ┃ Rank ┃ Score ┃ Discount ┃   $/L ┃ Product                ┃ Retailer   ┃ Price ┃
+# ┡━━━━━━╇━━━━━━━╇━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━┩
+# │    1 │  92.4 │      38% │ $42.0 │ Johnnie Walker Black   │ Danmurphys │ $38.00│
+# │    2 │  81.0 │      31% │ $21.0 │ Penfolds Bin 389 2021  │ Bws        │ $46.00│
+# └──────┴───────┴──────────┴───────┴────────────────────────┴────────────┴───────┘
 ```
 
 ---
@@ -620,11 +668,12 @@ python -m bottlebot.run_scoring --dry-run --top 20
 - [ ] Blocklisted brands are excluded
 - [ ] Watchlist items receive bonus score and appear at top
 - [ ] Immediate alerts fire for scores ≥ `immediate_threshold`
-- [ ] ntfy alert received on phone for a test deal
-- [ ] Discord embed received with correct fields
+- [ ] Discord message received via apprise with correct fields and a working "View on BottleBot" link
+- [ ] `.env` secrets load correctly via `Settings` and are never written to `criteria.yaml`
 - [ ] Daily digest scheduled correctly and sends at configured time
-- [ ] Dry-run prints ranked table without sending any alert
+- [ ] `python -m src.cli score` prints a ranked table without sending any alert
 - [ ] EOFY window modifier applies correctly in June
+- [ ] Easter window is computed correctly for the given year via `dateutil.easter.easter`
 
 ---
 
@@ -632,7 +681,9 @@ python -m bottlebot.run_scoring --dry-run --top 20
 
 - **90-day average is meaningless until Phase 1 has been running for a week+.** The first days of data will show everything as a "deal" because there's nothing to compare against. Add a guard: require at least 7 data points before scoring a product.
 - **Retailer "was" prices are unreliable.** Dan Murphy's sometimes inflates the "was" price right before a sale. Always use the 90d average as the source of truth; show the retailer discount alongside for reference only.
-- **ntfy rate limits:** On a self-hosted instance you control limits, but don't fire more than one message per second or the ntfy container may queue-stall under load. Add a 0.5s sleep between alerts in the immediate fire loop.
+- **Alert rate limits:** Discord webhooks and most apprise targets are happy with a message a second, but don't fire faster than that. Keep the 0.5s sleep between alerts in the immediate fire loop.
+- **apprise body format is per-call, not per-target.** Passing `body_format=apprise.NotifyFormat.MARKDOWN` to `.notify()` renders markdown links/bold for Discord and any other target that supports it; plain-text-only targets (e.g. SMS gateways) will just show the raw markdown, which is usually still readable.
+- **Never commit `.env`.** Add `.env` to `.gitignore` — only `.env.example` (with placeholder values) should be committed. Webhook URLs are effectively bearer tokens.
 
 ---
 

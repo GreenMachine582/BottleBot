@@ -20,13 +20,15 @@
 - [ ] EOFY/sale calendar indicator in header
 - [ ] Scrape run status / health panel
 - [ ] Docker-networked, accessible on the local network
+- [ ] Dashboard warns if `web.base_url` (the value Phase 2 uses to build "View on BottleBot" alert links) doesn't match how the dashboard is actually being accessed
+- [ ] pytest smoke tests for web routes; `ruff check` passes
 
 ---
 
 ## 1. App structure
 
 ```
-bottlebot/web/
+src/web/
 ├── app.py              # FastAPI app + router registration
 ├── routes/
 │   ├── dashboard.py    # GET / — top deals today
@@ -50,15 +52,15 @@ bottlebot/web/
 ## 2. FastAPI app
 
 ```python
-# bottlebot/web/app.py
+# src/web/app.py
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from .routes import dashboard, deals, watchlist, criteria, health
 
 app = FastAPI(title="BottleBot", docs_url=None, redoc_url=None)
-app.mount("/static", StaticFiles(directory="bottlebot/web/static"), name="static")
-templates = Jinja2Templates(directory="bottlebot/web/templates")
+app.mount("/static", StaticFiles(directory="src/web/static"), name="static")
+templates = Jinja2Templates(directory="src/web/templates")
 
 app.include_router(dashboard.router)
 app.include_router(deals.router)
@@ -67,14 +69,14 @@ app.include_router(criteria.router)
 app.include_router(health.router)
 ```
 
-Run with: `uvicorn bottlebot.web.app:app --host 0.0.0.0 --port 8080`
+Run with: `uvicorn src.web.app:app --host 0.0.0.0 --port 8080`
 
 ---
 
 ## 3. Dashboard route
 
 ```python
-# bottlebot/web/routes/dashboard.py
+# src/web/routes/dashboard.py
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -85,7 +87,7 @@ from ...scoring.criteria import load_criteria
 from ...calendar import SaleCalendar
 
 router = APIRouter()
-templates = Jinja2Templates(directory="bottlebot/web/templates")
+templates = Jinja2Templates(directory="src/web/templates")
 
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
@@ -96,11 +98,20 @@ async def dashboard(request: Request):
 
     sale_window = SaleCalendar().current_window()
 
+    # criteria.web.base_url is what Phase 2 uses to build "View on BottleBot" links in
+    # Discord alerts. If it doesn't match how this dashboard is actually being reached,
+    # those links will be broken on other devices — surface it as a banner.
+    configured_base_url = criteria.web.base_url.rstrip("/")
+    actual_base_url = str(request.base_url).rstrip("/")
+    base_url_mismatch = configured_base_url != actual_base_url
+
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "deals": deals[:50],
         "sale_window": sale_window,
         "min_score": criteria.alerts.min_deal_score,
+        "configured_base_url": configured_base_url,
+        "base_url_mismatch": base_url_mismatch,
     })
 ```
 
@@ -109,13 +120,22 @@ async def dashboard(request: Request):
 ## 4. Dashboard template
 
 ```html
-<!-- bottlebot/web/templates/dashboard.html -->
+<!-- src/web/templates/dashboard.html -->
 {% extends "base.html" %}
 {% block content %}
 
 {% if sale_window %}
 <div class="sale-banner">
   🔥 {{ sale_window }} sale window active — thresholds adjusted
+</div>
+{% endif %}
+
+{% if base_url_mismatch %}
+<div class="base-url-warning">
+  ⚠️ Alert links point to <code>{{ configured_base_url }}</code>, but you're viewing this
+  dashboard at <code>{{ request.base_url }}</code>. Update <code>web.base_url</code> in
+  <code>config/criteria.yaml</code> so "View on BottleBot" links in Discord work from your
+  phone and other devices.
 </div>
 {% endif %}
 
@@ -166,7 +186,7 @@ The deal detail page shows:
 - Bulk-buy calculator
 
 ```python
-# bottlebot/web/routes/deals.py
+# src/web/routes/deals.py
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -177,7 +197,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 
 router = APIRouter()
-templates = Jinja2Templates(directory="bottlebot/web/templates")
+templates = Jinja2Templates(directory="src/web/templates")
 
 def build_price_chart(history: list[PriceHistory]) -> str:
     """Returns an HTML div containing the Plotly chart."""
@@ -287,7 +307,7 @@ async def bulk_calc(id: int, qty: int = 12):
 ## 7. Watchlist manager
 
 ```python
-# bottlebot/web/routes/watchlist.py
+# src/web/routes/watchlist.py
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -295,7 +315,7 @@ from ...scoring.criteria import load_criteria
 import yaml
 
 router = APIRouter()
-templates = Jinja2Templates(directory="bottlebot/web/templates")
+templates = Jinja2Templates(directory="src/web/templates")
 
 CRITERIA_PATH = "config/criteria.yaml"
 
@@ -358,7 +378,7 @@ async def remove_from_watchlist(
 ## 8. Health / scrape status panel
 
 ```python
-# bottlebot/web/routes/health.py
+# src/web/routes/health.py
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -366,7 +386,7 @@ from sqlalchemy.orm import Session
 from ...db.models import engine, ScrapeRun
 
 router = APIRouter()
-templates = Jinja2Templates(directory="bottlebot/web/templates")
+templates = Jinja2Templates(directory="src/web/templates")
 
 @router.get("/health", response_class=HTMLResponse)
 async def health(request: Request):
@@ -392,7 +412,7 @@ The health page shows a table of recent scrape runs: source, start time, duratio
 Uses [Pico CSS](https://picocss.com/) — classless, semantic HTML, dark mode out of the box. No JS framework.
 
 ```html
-<!-- bottlebot/web/templates/base.html -->
+<!-- src/web/templates/base.html -->
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
@@ -442,7 +462,7 @@ services:
     environment:
       - DB_PATH=/app/data/bottlebot.db
       - TZ=Australia/Sydney
-    command: python -m bottlebot.scheduler
+    command: python -m src.scheduler
 
   bottlebot-web:
     build: .
@@ -456,12 +476,38 @@ services:
     environment:
       - DB_PATH=/app/data/bottlebot.db
       - TZ=Australia/Sydney
-    command: uvicorn bottlebot.web.app:app --host 0.0.0.0 --port 8080
+    command: uvicorn src.web.app:app --host 0.0.0.0 --port 8080
     depends_on:
       - bottlebot
 ```
 
 Access via `http://<host-ip>:8080` on your local network.
+
+---
+
+## 11. Testing & linting
+
+```python
+# tests/test_web_dashboard.py
+from fastapi.testclient import TestClient
+from src.web.app import app
+
+client = TestClient(app)
+
+def test_dashboard_loads():
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert "Today's deals" in resp.text
+
+def test_health_loads():
+    resp = client.get("/health")
+    assert resp.status_code == 200
+```
+
+```bash
+pytest tests/ -v
+ruff check .
+```
 
 ---
 
@@ -476,6 +522,8 @@ Access via `http://<host-ip>:8080` on your local network.
 - [ ] Health page shows last 30 scrape runs with status
 - [ ] EOFY banner appears in header during June 15–30
 - [ ] Accessible from another device on the local network
+- [ ] Base-URL mismatch banner appears when `web.base_url` doesn't match the dashboard's actual address, and disappears once `criteria.yaml` is corrected
+- [ ] `pytest` and `ruff check .` both pass
 
 ---
 

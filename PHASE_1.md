@@ -10,12 +10,13 @@
 
 ## Deliverables
 
-- [ ] Dan Murphy's scraper (deals page + category pages)
+- [ ] Dan Murphy's scraper (deals page + category pages) with `tenacity` retries on network calls
 - [ ] SQLAlchemy models & Alembic migration baseline
-- [ ] CLI runner (`python -m bottlebot scrape --source danmurphys`)
+- [ ] CLI runner (`python -m src.cli scrape --source danmurphys`) via typer
 - [ ] APScheduler job running every 6 hours
 - [ ] Basic deduplication (don't re-insert unchanged prices)
 - [ ] Docker container + Compose file
+- [ ] pytest suite covering the DB writer's dedup/price-change logic
 
 ---
 
@@ -89,7 +90,7 @@ CREATE TABLE scrape_runs (
 );
 ```
 
-### SQLAlchemy models (`bottlebot/db/models.py`)
+### SQLAlchemy models (`src/db/models.py`)
 
 ```python
 from datetime import datetime
@@ -158,7 +159,7 @@ class ScrapeRun(Base):
 All retailer scrapers implement this interface. Makes Phase 3 (adding sources) a drop-in extension.
 
 ```python
-# bottlebot/scrapers/base.py
+# src/scrapers/base.py
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Iterator
@@ -205,10 +206,11 @@ class BaseScraper(ABC):
 Dan Murphy's is a React SPA — requires Playwright for JS rendering. The deals page and category pages are the primary targets.
 
 ```python
-# bottlebot/scrapers/danmurphys.py
+# src/scrapers/danmurphys.py
 import re
 from typing import Iterator
 from playwright.sync_api import sync_playwright, Page
+from tenacity import retry, stop_after_attempt, wait_exponential
 from .base import BaseScraper, ScrapedProduct
 
 DEALS_URL = "https://www.danmurphys.com.au/dm/page/deals"
@@ -266,8 +268,13 @@ class DanMurphysScraper(BaseScraper):
         except Exception:
             return None
 
-    def _scrape_page(self, page: Page, url: str) -> Iterator[ScrapedProduct]:
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    def _goto(self, page: Page, url: str):
+        """Navigate with retries — Dan Murphy's occasionally times out under load."""
         page.goto(url, wait_until="networkidle", timeout=30000)
+
+    def _scrape_page(self, page: Page, url: str) -> Iterator[ScrapedProduct]:
+        self._goto(page, url)
         # Scroll to load lazy content
         for _ in range(5):
             page.evaluate("window.scrollBy(0, window.innerHeight)")
@@ -312,7 +319,7 @@ class DanMurphysScraper(BaseScraper):
 ## 4. Persistence layer
 
 ```python
-# bottlebot/db/writer.py
+# src/db/writer.py
 from datetime import datetime
 from sqlalchemy.orm import Session
 from .models import Product, RetailerProduct, PriceHistory, ScrapeRun
@@ -378,7 +385,7 @@ def upsert_product(session: Session, scraped: ScrapedProduct) -> tuple[RetailerP
 ## 5. Scheduler & CLI
 
 ```python
-# bottlebot/scheduler.py
+# src/scheduler.py
 from apscheduler.schedulers.blocking import BlockingScheduler
 from .scrapers.danmurphys import DanMurphysScraper
 from .db.writer import upsert_product
@@ -437,6 +444,42 @@ if __name__ == "__main__":
     main()
 ```
 
+### CLI entrypoint
+
+A small [typer](https://typer.tiangolo.com/) app gives a one-off scrape command for manual runs
+and debugging, without waiting for the scheduler's next 6-hour tick. Phase 2 extends this same
+app with a `score` command.
+
+```python
+# src/cli.py
+import typer
+from .scrapers.danmurphys import DanMurphysScraper
+from .scheduler import run_scraper
+
+app = typer.Typer(help="BottleBot CLI")
+
+SCRAPERS = {
+    "danmurphys": DanMurphysScraper,
+}
+
+@app.command()
+def scrape(source: str = typer.Option("danmurphys", help="Scraper source to run")):
+    """Run a one-off scrape for the given source."""
+    scraper_cls = SCRAPERS.get(source)
+    if not scraper_cls:
+        typer.echo(f"Unknown source: {source}. Choices: {', '.join(SCRAPERS)}")
+        raise typer.Exit(1)
+    run_scraper(scraper_cls, source)
+
+if __name__ == "__main__":
+    app()
+```
+
+```bash
+# Run a manual scrape outside the scheduler
+python -m src.cli scrape --source danmurphys
+```
+
 ---
 
 ## 6. Docker setup
@@ -456,7 +499,7 @@ RUN playwright install chromium
 
 COPY . .
 
-CMD ["python", "-m", "bottlebot.scheduler"]
+CMD ["python", "-m", "src.scheduler"]
 ```
 
 ```yaml
@@ -476,7 +519,67 @@ services:
 
 ---
 
-## 7. Phase 1 acceptance criteria
+## 7. Testing
+
+The DB writer's dedup logic is the highest-value thing to test in Phase 1 — it's pure
+SQLAlchemy against an in-memory SQLite DB, so no Playwright/browser needed.
+
+```python
+# tests/test_writer.py
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+from src.db.models import Base
+from src.db.writer import upsert_product
+from src.scrapers.base import ScrapedProduct
+
+@pytest.fixture
+def session():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as s:
+        yield s
+
+def make_product(**overrides) -> ScrapedProduct:
+    defaults = dict(
+        retailer="danmurphys", retailer_sku="123", url="https://example.com/p/123",
+        name="Test Whisky 700mL", brand="Test", category="whisky",
+        volume_ml=700, abv=40.0, price_aud=50.0, was_price_aud=60.0,
+        in_stock=True, on_sale=True, promo_label="Test Sale", image_url=None,
+    )
+    defaults.update(overrides)
+    return ScrapedProduct(**defaults)
+
+def test_first_scrape_inserts_price_history(session):
+    rp, changed = upsert_product(session, make_product())
+    session.commit()
+    assert changed is True
+    assert rp.id is not None
+
+def test_unchanged_price_does_not_insert_again(session):
+    upsert_product(session, make_product())
+    session.commit()
+    _, changed = upsert_product(session, make_product())
+    session.commit()
+    assert changed is False
+
+def test_price_drop_inserts_new_row(session):
+    upsert_product(session, make_product(price_aud=50.0))
+    session.commit()
+    _, changed = upsert_product(session, make_product(price_aud=45.0))
+    session.commit()
+    assert changed is True
+```
+
+```bash
+pytest tests/ -v
+```
+
+Run `ruff check .` and `ruff format .` before committing — both are fast enough to run on every save.
+
+---
+
+## 8. Phase 1 acceptance criteria
 
 - [ ] `docker compose up` starts the scheduler cleanly
 - [ ] First scrape run completes, `scrape_runs` table shows `status = 'success'`
@@ -493,6 +596,7 @@ services:
 - **Rate limiting:** Add `page.wait_for_timeout(1000–2000ms)` between page navigations. Don't hammer at < 1s intervals.
 - **Headless Chromium on ARM hosts:** Playwright's bundled Chromium is x86-only. On ARM64 hosts, install the system Chromium and point Playwright at it via `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser`.
 - **Volume parsing:** Names like "700mL", "700 mL", "70cl", "1.125L" all appear in the wild. The regex handles mL/L but watch for cl (centilitre) variants on imported products.
+- **tenacity retries and `session.commit()`:** the `@retry` on `_goto` only covers navigation — if a transient failure happens mid-page (e.g. a selector query throws), it propagates up to `run_scraper`'s `except` block and the whole run is marked `failed`. That's fine for Phase 1 (the next scheduled run picks it up), but don't be tempted to wrap the entire `scrape_deals()` generator in `@retry` — partial results would be re-yielded from the start and double-counted in `seen`/`inserted`.
 
 ---
 

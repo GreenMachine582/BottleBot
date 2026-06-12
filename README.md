@@ -12,7 +12,7 @@ BottleBot monitors Dan Murphy's, BWS, Liquorland, First Choice, and other Austra
 
 You configure your own criteria — minimum discount, cost-per-litre thresholds, category weights, brand allowlists — and BottleBot fires an alert only when something clears your bar. No noise, just signal.
 
-Runs as a standalone Docker project — `docker compose up` and you're scraping — with alerts via ntfy (self-hosted or ntfy.sh) and Discord as a fallback.
+Runs as a standalone Docker project — `docker compose up` and you're scraping — with alerts sent via [apprise](https://github.com/caronc/apprise), Discord being the primary channel (ntfy, email, and 100+ other services also supported).
 
 ---
 
@@ -23,7 +23,7 @@ Runs as a standalone Docker project — `docker compose up` and you're scraping 
 | **Price history DB** | SQLite stores every scraped price with timestamp. Calculates real discount vs 90-day rolling average, not the retailer's "was" price. |
 | **Deal scoring engine** | Weighted score per deal: discount depth × category weight × CPL rating × bulk-buy value. Fully configurable formula in YAML. |
 | **User-configured criteria** | Min discount %, absolute $ saving, CPL threshold, category weights, brand allowlist/blocklist, min stock signal. |
-| **Multi-channel alerts** | ntfy (self-hosted), Discord webhook, email. Fires when score clears threshold. Daily digest or immediate hot-deal mode. |
+| **Multi-channel alerts** | Discord (primary), plus ntfy, email, and 100+ other services via apprise. Fires when score clears threshold. Daily digest or immediate hot-deal mode. Alerts link to both the retailer product page and the BottleBot dashboard. |
 | **Sale calendar awareness** | Pre-loaded AU retail calendar (EOFY June, Boxing Day, Easter). Tightens thresholds during sale windows. |
 | **Price trend charts** | Per-product price history in alert payload or web UI. See if "50% off" is off a fake inflated RRP. |
 | **Bulk-buy calculator** | Cost for 6/12/24 units, storage cost estimate, break-even vs normal retail. |
@@ -49,13 +49,16 @@ Runs as a standalone Docker project — `docker compose up` and you're scraping 
 ## Tech stack
 
 ```
-Scraping      playwright · requests · httpx · beautifulsoup4 · selectolax
+Scraping      playwright · requests · httpx · curl_cffi · beautifulsoup4 · selectolax · tenacity
 Storage       sqlite3 · SQLAlchemy · alembic
-Scoring       pydantic · pyyaml · pandas
-Alerts        httpx · ntfy · discord-webhook · smtplib
+Scoring       pydantic · pyyaml · pandas · python-dateutil
+Alerts        apprise (Discord primary · ntfy, email, etc.)
+Config        python-dotenv · pydantic-settings
 Scheduling    APScheduler · cron
 Charts        matplotlib · plotly
 Web UI        FastAPI · htmx · jinja2
+CLI           typer · rich
+Dev & test    pytest · respx · ruff
 Deploy        Docker · Docker Compose
 ```
 
@@ -81,9 +84,13 @@ bottlebot/
 ├── PHASE_2.md
 ├── PHASE_3.md
 ├── PHASE_4.md
+├── .env.example                # Template for secrets (webhook URLs, API keys)
 ├── config/
-│   └── criteria.yaml          # User deal criteria & weights
-├── bottlebot/
+│   └── criteria.yaml          # User deal criteria & weights (no secrets)
+├── src/
+│   ├── cli.py                  # typer CLI: scrape, score (dry-run)
+│   ├── config/
+│   │   └── settings.py        # pydantic-settings, loads .env
 │   ├── scrapers/
 │   │   ├── base.py            # Abstract scraper interface
 │   │   ├── danmurphys.py
@@ -96,8 +103,7 @@ bottlebot/
 │   │   ├── engine.py          # Deal scoring logic
 │   │   └── criteria.py        # Criteria loader & validator
 │   ├── alerts/
-│   │   ├── ntfy.py
-│   │   ├── discord.py
+│   │   ├── notify.py          # apprise-based alerts (Discord primary)
 │   │   └── digest.py          # Daily digest builder
 │   ├── calendar.py            # AU sale calendar awareness
 │   ├── scheduler.py           # APScheduler setup
@@ -112,18 +118,21 @@ bottlebot/
 ## Configuration (quick look)
 
 ```yaml
-# config/criteria.yaml
+# config/criteria.yaml — shareable, no secrets
 alerts:
   min_deal_score: 65          # 0-100 score threshold to fire alert
   immediate_threshold: 85     # Score at which to bypass digest and alert immediately
   digest_time: "08:00"        # Daily digest send time (AEST)
 
+web:
+  base_url: "http://localhost:8080"   # Used to build "View on BottleBot" links in alerts
+
 scoring:
   weights:
-    discount_pct: 0.35        # Weight: how deep the discount is
-    cpl_rating:   0.30        # Weight: cost per litre vs category average
-    bulk_value:   0.20        # Weight: savings increase when buying 12+
-    category:     0.15        # Weight: personal category preference multiplier
+    real_discount_pct: 0.35   # Weight: how deep the discount is vs 90-day average
+    cpl_rating:        0.30   # Weight: cost per litre vs category average
+    bulk_value:        0.20   # Weight: savings increase when buying 12+
+    category_pref:     0.15   # Weight: personal category preference multiplier
 
 categories:
   whisky:     1.4             # Multiplier — you care more about whisky
@@ -137,19 +146,24 @@ thresholds:
   min_saving_aud:    10       # Ignore anything saving less than $10
   max_cpl_aud:                # Max $/L by category
     whisky: 60
-    wine:   25
+    wine_red: 25
     beer:   8
+    default: 30
 
 watchlist:
-  - "Johnnie Walker Black"
-  - "Penfolds Bin 389"
-  - category: whisky          # Any whisky deal fires immediately
+  products:
+    - "Johnnie Walker Black"
+    - "Penfolds Bin 389"
+  categories: []              # e.g. ["whisky"] — any deal in these categories fires immediately
 
 brands:
   blocklist:
     - "Black Douglas"         # Never alert on these
   allowlist: []               # Empty = all brands allowed
 ```
+
+Secrets (Discord webhook URL, BWS API key, etc.) live in a separate `.env` file, loaded via
+`pydantic-settings` — see [PHASE_2.md](./PHASE_2.md#notification-secrets-env).
 
 ---
 
@@ -162,13 +176,15 @@ BottleBot runs as a standalone Docker Compose project — no external infrastruc
 docker compose up -d
 
 # Run a manual scrape
-docker exec bottlebot python -m bottlebot.scrapers.danmurphys --once
+docker exec bottlebot python -m src.cli scrape --source danmurphys
 
-# Check deal scores today
-docker exec bottlebot python -m bottlebot.scoring.engine --dry-run
+# Check deal scores today without sending alerts
+docker exec bottlebot python -m src.cli score --top 20
 ```
 
-Alerts via ntfy topic `bottlebot-deals` (self-hosted or ntfy.sh) with Discord as a fallback. See Phase 2 docs for full alert configuration.
+Alerts go out via [apprise](https://github.com/caronc/apprise), with Discord as the primary
+channel — ntfy, email, and 100+ other services can be added as extra targets. See
+[PHASE_2.md](./PHASE_2.md) for full alert configuration.
 
 ---
 
@@ -176,7 +192,7 @@ Alerts via ntfy topic `bottlebot-deals` (self-hosted or ntfy.sh) with Discord as
 
 - No existing AU tool covers bottle shops with real price history (not retailer "was" prices)
 - No tool lets you weight by category, CPL, or bulk-buy value
-- No tool integrates with self-hosted alert infrastructure (ntfy)
+- No tool sends Discord alerts that link straight back to your own price-history dashboard
 - This is more fun
 
 ---

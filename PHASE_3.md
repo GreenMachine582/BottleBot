@@ -10,9 +10,9 @@
 
 ## Deliverables
 
-- [ ] BWS scraper
-- [ ] Liquorland scraper
-- [ ] First Choice Liquor scraper
+- [ ] BWS scraper, with tenacity retries and its subscription key loaded from `.env` via `Settings`
+- [ ] Liquorland scraper, using curl_cffi to avoid Coles Group's TLS-fingerprint bot detection
+- [ ] First Choice Liquor scraper (same curl_cffi pattern as Liquorland)
 - [ ] CellarMasters scraper (wine focus)
 - [ ] Vintage Cellars scraper
 - [ ] Cross-retailer product deduplication / matching
@@ -20,6 +20,7 @@
 - [ ] Robust CPL calculation with volume parsing edge cases
 - [ ] Cross-retailer deal comparison (same product, cheapest retailer wins)
 - [ ] Scheduler updated for all sources with staggered timing
+- [ ] respx-based tests for the new HTTP API scrapers
 
 ---
 
@@ -28,7 +29,7 @@
 Phase 1 established `BaseScraper`. All new scrapers implement the same interface — the scoring engine doesn't care which retailer a product came from.
 
 ```
-bottlebot/scrapers/
+src/scrapers/
 ├── base.py              ✅ Phase 1
 ├── danmurphys.py        ✅ Phase 1
 ├── bws.py               🆕 Phase 3
@@ -49,26 +50,32 @@ Each scraper only needs to implement `scrape_deals()` and optionally `scrape_cat
 BWS shares the Endeavour Group backend with Dan Murphy's. The product catalogue overlaps significantly, but pricing and promotions differ. BWS also has an unofficial internal API used by its own frontend — intercepting this is more reliable than scraping rendered HTML.
 
 ```python
-# bottlebot/scrapers/bws.py
+# src/scrapers/bws.py
 """
 BWS uses a GraphQL-style internal API at:
   https://api.bws.com.au/apis/ui/v3/Products/Category/...
 This is more stable than scraping rendered HTML and returns structured JSON.
 """
 import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential
 from .base import BaseScraper, ScrapedProduct
+from ..config.settings import Settings
 
 BWS_API_BASE = "https://api.bws.com.au/apis/ui/v3"
 BWS_DEALS_URL = f"{BWS_API_BASE}/Products/Category/specials?pageNumber=1&pageSize=100"
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; BottleBot/1.0)",
-    "referer": "https://bws.com.au/",
-    "subscription-key": "",  # May need to extract from BWS frontend JS — check Network tab
-}
-
 class BWSScraper(BaseScraper):
     retailer = "bws"
+
+    def __init__(self, settings: Settings | None = None):
+        self.settings = settings or Settings()
+
+    def _headers(self) -> dict:
+        return {
+            "User-Agent": "Mozilla/5.0 (compatible; BottleBot/1.0)",
+            "referer": "https://bws.com.au/",
+            "subscription-key": self.settings.bws_subscription_key,
+        }
 
     def _parse_api_product(self, item: dict) -> ScrapedProduct | None:
         try:
@@ -105,17 +112,20 @@ class BWSScraper(BaseScraper):
         }
         return mapping.get(bws_category.lower(), bws_category.lower().replace(" ", "_"))
 
-    def scrape_deals(self):
-        resp = httpx.get(BWS_DEALS_URL, headers=HEADERS, timeout=20)
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    def _fetch_deals(self) -> list[dict]:
+        resp = httpx.get(BWS_DEALS_URL, headers=self._headers(), timeout=20)
         resp.raise_for_status()
-        products = resp.json().get("Products", [])
-        for item in products:
+        return resp.json().get("Products", [])
+
+    def scrape_deals(self):
+        for item in self._fetch_deals():
             p = self._parse_api_product(item)
             if p:
                 yield p
 ```
 
-> **API key note:** BWS's internal API may require a `subscription-key` header extracted from their frontend JS bundle. Check the Network tab when browsing bws.com.au — look for requests to `api.bws.com.au`. This key changes infrequently. Store it in `criteria.yaml` or a `.env` file, not hardcoded.
+> **API key note:** BWS's internal API may require a `subscription-key` header extracted from their frontend JS bundle. Check the Network tab when browsing bws.com.au — look for requests to `api.bws.com.au`. This key changes infrequently. Add it to `.env` as `BOTTLEBOT_BWS_SUBSCRIPTION_KEY` and extend the `Settings` class from Phase 2 with a matching `bws_subscription_key: str = ""` field — never commit it to `criteria.yaml`.
 
 ---
 
@@ -124,16 +134,21 @@ class BWSScraper(BaseScraper):
 Both are Coles Group properties and run similar infrastructure. Liquorland uses a more standard rendered HTML structure than BWS.
 
 ```python
-# bottlebot/scrapers/liquorland.py
+# src/scrapers/liquorland.py
 """
 Liquorland is a Coles Group property. Product pages are server-rendered
 with structured data in JSON-LD <script> tags — parse these rather than
 fighting with CSS selectors.
+
+Coles Group fronts its sites with bot detection that fingerprints the
+TLS/JA3 handshake of generic HTTP clients. Plain httpx/requests get 403'd;
+curl_cffi impersonates a real Chrome TLS fingerprint and gets through.
 """
-import httpx
+from curl_cffi import requests
 import json
 import re
 from bs4 import BeautifulSoup
+from tenacity import retry, stop_after_attempt, wait_exponential
 from .base import BaseScraper, ScrapedProduct
 
 DEALS_URL = "https://www.liquorland.com.au/specials"
@@ -187,11 +202,15 @@ class LiquorlandScraper(BaseScraper):
         except Exception:
             return None
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    def _fetch_page(self, page: int):
+        return requests.get(f"{DEALS_URL}?page={page}", impersonate="chrome", timeout=20)
+
     def scrape_deals(self):
         # Liquorland specials page uses pagination via query param
         page = 1
         while True:
-            resp = httpx.get(f"{DEALS_URL}?page={page}", timeout=20)
+            resp = self._fetch_page(page)
             if resp.status_code != 200:
                 break
             items = self._extract_json_ld(resp.text)
@@ -199,7 +218,7 @@ class LiquorlandScraper(BaseScraper):
             if not products:
                 break
             for item in products:
-                p = self._parse_json_ld_product(item, resp.url)
+                p = self._parse_json_ld_product(item, str(resp.url))
                 if p:
                     p.on_sale = True
                     yield p
@@ -215,13 +234,14 @@ class LiquorlandScraper(BaseScraper):
 CellarMasters is wine-focused with a membership pricing tier. Scrape both guest and member prices where available.
 
 ```python
-# bottlebot/scrapers/cellarmasters.py
+# src/scrapers/cellarmasters.py
 """
 CellarMasters has a REST-ish product API used by their own SPA.
 Endpoint: https://www.cellarmasters.com.au/api/products?category=specials
 Returns JSON with product list.
 """
 import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential
 from .base import BaseScraper, ScrapedProduct
 
 API_URL = "https://www.cellarmasters.com.au/api/products"
@@ -229,10 +249,14 @@ API_URL = "https://www.cellarmasters.com.au/api/products"
 class CellarMastersScraper(BaseScraper):
     retailer = "cellarmasters"
 
-    def scrape_deals(self):
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    def _fetch_deals(self) -> list[dict]:
         resp = httpx.get(API_URL, params={"category": "specials", "limit": 200}, timeout=20)
         resp.raise_for_status()
-        for item in resp.json().get("products", []):
+        return resp.json().get("products", [])
+
+    def scrape_deals(self):
+        for item in self._fetch_deals():
             try:
                 yield ScrapedProduct(
                     retailer=self.retailer,
@@ -270,7 +294,7 @@ The same bottle of Johnnie Walker Black 700mL will appear as a separate `Retaile
 Match on a normalised key derived from: `brand + name + volume_ml`. This catches ~90% of cases. Fuzzy matching handles spelling variations.
 
 ```python
-# bottlebot/db/matching.py
+# src/db/matching.py
 import re
 from difflib import SequenceMatcher
 from sqlalchemy.orm import Session
@@ -338,7 +362,7 @@ Real-world volume strings seen in Australian bottle shop listings:
 | `4 Pack 440mL` | 440 (single unit) |
 
 ```python
-# bottlebot/scrapers/utils.py
+# src/scrapers/utils.py
 import re
 
 _VOL_RE = re.compile(
@@ -376,7 +400,7 @@ def calc_cpl(price_aud: float, volume_ml: int) -> float:
 Each retailer uses different category names. Map all to a common taxonomy used by the scoring engine and the YAML config.
 
 ```python
-# bottlebot/scrapers/taxonomy.py
+# src/scrapers/taxonomy.py
 
 CATEGORY_MAP: dict[str, str] = {
     # Whisky
@@ -438,7 +462,7 @@ def normalise_category(raw: str) -> str:
 Once the same product is matched across retailers, we can find which retailer has the best current price.
 
 ```python
-# bottlebot/scoring/cross_retailer.py
+# src/scoring/cross_retailer.py
 from dataclasses import dataclass
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -509,7 +533,7 @@ def compare_product_across_retailers(
 Stagger scrape times to avoid all retailers being hit simultaneously, and to spread load on the host.
 
 ```python
-# bottlebot/scheduler.py (updated)
+# src/scheduler.py (updated)
 scheduler.add_job(run_scraper, "interval", hours=6, minutes=0,  args=[DanMurphysScraper,    "danmurphys"])
 scheduler.add_job(run_scraper, "interval", hours=6, minutes=15, args=[BWSScraper,            "bws"])
 scheduler.add_job(run_scraper, "interval", hours=6, minutes=30, args=[LiquorlandScraper,     "liquorland"])
@@ -517,6 +541,55 @@ scheduler.add_job(run_scraper, "interval", hours=6, minutes=45, args=[FirstChoic
 scheduler.add_job(run_scraper, "interval", hours=12, minutes=0, args=[CellarMastersScraper,  "cellarmasters"])
 scheduler.add_job(run_scraper, "interval", hours=12, minutes=30,args=[VintageCellarsScraper, "vintagecellars"])
 ```
+
+---
+
+## 8. Testing the new scrapers
+
+The BWS and CellarMasters scrapers talk to JSON APIs over httpx — [respx](https://lundberg.github.io/respx/)
+mocks those calls so the parsing logic can be tested without hitting the network.
+
+```python
+# tests/test_bws_scraper.py
+import respx
+import httpx
+from src.scrapers.bws import BWSScraper, BWS_DEALS_URL
+
+@respx.mock
+def test_scrape_deals_parses_and_normalises():
+    respx.get(BWS_DEALS_URL).mock(return_value=httpx.Response(200, json={
+        "Products": [{
+            "Stockcode": "123456",
+            "Description": "Johnnie Walker Black Label 700mL",
+            "Brand": "Johnnie Walker",
+            "SubType": "scotch whisky",
+            "PackageSize": {"Millilitres": 700},
+            "AlcoholPercentage": 40.0,
+            "Price": {"Value": 65.0, "PromotionalPrice": 52.0},
+            "InStoreAvailability": True,
+            "Tags": ["EOFY Sale"],
+            "UrlFriendlyName": "johnnie-walker-black-label-700ml",
+            "SmallImageFile": "jwb700.jpg",
+        }]
+    }))
+
+    products = list(BWSScraper().scrape_deals())
+
+    assert len(products) == 1
+    p = products[0]
+    assert p.price_aud == 52.0
+    assert p.was_price_aud == 65.0
+    assert p.category == "whisky"     # SubType "scotch whisky" normalised via _normalise_category
+    assert p.on_sale is True
+```
+
+```bash
+pytest tests/ -v -k scraper
+```
+
+> **curl_cffi scrapers (Liquorland, First Choice) aren't covered by respx** — respx only intercepts
+> httpx. Test their parsing logic (`_extract_json_ld`, `_parse_json_ld_product`) directly with
+> canned JSON-LD fixtures instead of mocking the HTTP layer.
 
 ---
 
@@ -537,9 +610,10 @@ scheduler.add_job(run_scraper, "interval", hours=12, minutes=30,args=[VintageCel
 
 - **Selector stability varies by retailer.** Dan Murphy's (Playwright) is the most likely to break. Liquorland's JSON-LD is the most stable. BWS's internal API is reliable if the API key remains valid.
 - **Product matching false positives.** The fuzzy name match might link a 700mL to a 1L if volume parsing fails. Always require volume match before fuzzy name match. Log matches with similarity score < 0.92 for manual review.
-- **Coles Group block.** Liquorland and First Choice have occasionally blocked headless scrapers. If you hit 403s, add a realistic `User-Agent` and 2–3 second delays. Playwright with a real Chromium fingerprint is a fallback.
+- **Coles Group block.** Liquorland and First Choice fingerprint the TLS handshake and 403 plain httpx/requests clients. curl_cffi's `impersonate="chrome"` is the primary fix (see Section 2). If 403s still occur, add a realistic `User-Agent` and 2–3 second delays as a fallback; Playwright with a real Chromium fingerprint is the last resort.
 - **CellarMasters API:** The API URL used above is illustrative — verify against the live site's Network tab before relying on it. Their membership pricing may require a session cookie.
 - **Memory on constrained hosts:** Running 6 Playwright instances concurrently can exhaust RAM on low-memory hosts (≤2GB). The staggered scheduler prevents this — never run more than one Playwright session at a time.
+- **tenacity + generators don't mix.** `@retry` on a generator function only runs when the generator is first iterated, and a failure mid-iteration restarts the whole generator from scratch — re-yielding already-seen items. Keep the network call in a non-generator `_fetch_*` method (as in BWS/Liquorland/CellarMasters above) and let `scrape_deals()` iterate over its already-fetched result.
 
 ---
 
