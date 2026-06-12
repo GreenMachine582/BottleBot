@@ -12,7 +12,7 @@ BottleBot monitors Dan Murphy's, BWS, Liquorland, First Choice, and other Austra
 
 You configure your own criteria — minimum discount, cost-per-litre thresholds, category weights, brand allowlists — and BottleBot fires an alert only when something clears your bar. No noise, just signal.
 
-Designed to run on a Raspberry Pi homelab, deploy via Ansible/Docker, and alert via ntfy (self-hosted) with Discord as a fallback.
+Runs as a standalone Docker project — `docker compose up` and you're scraping — with alerts via ntfy (self-hosted or ntfy.sh) and Discord as a fallback.
 
 ---
 
@@ -52,11 +52,11 @@ Designed to run on a Raspberry Pi homelab, deploy via Ansible/Docker, and alert 
 Scraping      playwright · requests · httpx · beautifulsoup4 · selectolax
 Storage       sqlite3 · SQLAlchemy · alembic
 Scoring       pydantic · pyyaml · pandas
-Alerts        httpx · ntfy (self-hosted) · discord-webhook · smtplib
+Alerts        httpx · ntfy · discord-webhook · smtplib
 Scheduling    APScheduler · cron
 Charts        matplotlib · plotly
 Web UI        FastAPI · htmx · jinja2
-Deploy        Docker · Ansible (homelab)
+Deploy        Docker · Docker Compose
 ```
 
 ---
@@ -104,9 +104,7 @@ bottlebot/
 │   └── web/                   # Phase 4 FastAPI UI
 ├── tests/
 ├── docker-compose.yml
-├── Dockerfile
-└── ansible/
-    └── bottlebot.yml          # Homelab deploy playbook
+└── Dockerfile
 ```
 
 ---
@@ -155,15 +153,12 @@ brands:
 
 ---
 
-## Homelab deployment
+## Deployment
 
-BottleBot is designed to slot into an existing Raspberry Pi homelab running Docker + Ansible.
+BottleBot runs as a standalone Docker Compose project — no external infrastructure required.
 
 ```bash
-# Deploy via Ansible
-ansible-playbook ansible/bottlebot.yml -i inventory.yml
-
-# Or run directly with Docker Compose
+# Start the stack
 docker compose up -d
 
 # Run a manual scrape
@@ -173,7 +168,7 @@ docker exec bottlebot python -m bottlebot.scrapers.danmurphys --once
 docker exec bottlebot python -m bottlebot.scoring.engine --dry-run
 ```
 
-Alerts via ntfy topic `bottlebot-deals` with Discord as fallback. See Phase 2 docs for full alert configuration.
+Alerts via ntfy topic `bottlebot-deals` (self-hosted or ntfy.sh) with Discord as a fallback. See Phase 2 docs for full alert configuration.
 
 ---
 

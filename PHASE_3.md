@@ -506,7 +506,7 @@ def compare_product_across_retailers(
 
 ## 7. Scheduler update
 
-Stagger scrape times to avoid all retailers being hit simultaneously, and to spread load on the Pi.
+Stagger scrape times to avoid all retailers being hit simultaneously, and to spread load on the host.
 
 ```python
 # bottlebot/scheduler.py (updated)
@@ -539,7 +539,7 @@ scheduler.add_job(run_scraper, "interval", hours=12, minutes=30,args=[VintageCel
 - **Product matching false positives.** The fuzzy name match might link a 700mL to a 1L if volume parsing fails. Always require volume match before fuzzy name match. Log matches with similarity score < 0.92 for manual review.
 - **Coles Group block.** Liquorland and First Choice have occasionally blocked headless scrapers. If you hit 403s, add a realistic `User-Agent` and 2–3 second delays. Playwright with a real Chromium fingerprint is a fallback.
 - **CellarMasters API:** The API URL used above is illustrative — verify against the live site's Network tab before relying on it. Their membership pricing may require a session cookie.
-- **Pi memory:** Running 6 Playwright instances concurrently will exhaust RAM on a Pi 4 with 2GB. The staggered scheduler prevents this — never run more than one Playwright session at a time.
+- **Memory on constrained hosts:** Running 6 Playwright instances concurrently can exhaust RAM on low-memory hosts (≤2GB). The staggered scheduler prevents this — never run more than one Playwright session at a time.
 
 ---
 

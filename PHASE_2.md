@@ -632,7 +632,7 @@ python -m bottlebot.run_scoring --dry-run --top 20
 
 - **90-day average is meaningless until Phase 1 has been running for a week+.** The first days of data will show everything as a "deal" because there's nothing to compare against. Add a guard: require at least 7 data points before scoring a product.
 - **Retailer "was" prices are unreliable.** Dan Murphy's sometimes inflates the "was" price right before a sale. Always use the 90d average as the source of truth; show the retailer discount alongside for reference only.
-- **ntfy rate limits:** On a self-hosted instance you control limits, but don't fire more than one message per second or the Pi's ntfy container may queue-stall. Add a 0.5s sleep between alerts in the immediate fire loop.
+- **ntfy rate limits:** On a self-hosted instance you control limits, but don't fire more than one message per second or the ntfy container may queue-stall under load. Add a 0.5s sleep between alerts in the immediate fire loop.
 
 ---
 

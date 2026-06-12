@@ -16,7 +16,6 @@
 - [ ] APScheduler job running every 6 hours
 - [ ] Basic deduplication (don't re-insert unchanged prices)
 - [ ] Docker container + Compose file
-- [ ] Ansible deploy task for homelab
 
 ---
 
@@ -492,7 +491,7 @@ services:
 
 - **Selector drift:** Dan Murphy's updates their React component `data-testid` names occasionally. Budget for a 1-hour fix every few months.
 - **Rate limiting:** Add `page.wait_for_timeout(1000–2000ms)` between page navigations. Don't hammer at < 1s intervals.
-- **Headless Chromium on Pi:** Playwright's bundled Chromium is x86. On ARM (Pi 4/5), use `playwright install` with the system Chromium via `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser`.
+- **Headless Chromium on ARM hosts:** Playwright's bundled Chromium is x86-only. On ARM64 hosts, install the system Chromium and point Playwright at it via `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser`.
 - **Volume parsing:** Names like "700mL", "700 mL", "70cl", "1.125L" all appear in the wild. The regex handles mL/L but watch for cl (centilitre) variants on imported products.
 
 ---

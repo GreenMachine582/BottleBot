@@ -4,7 +4,7 @@
 
 **Estimated effort:** 2–3 weekends  
 **Depends on:** Phases 1–3 (all data, scoring, and sources must be running)  
-**Access:** Local network via Tailscale, or Pi's LAN IP. Not exposed to the public internet.
+**Access:** Local network only (e.g. `http://<host-ip>:8080`). Not exposed to the public internet.
 
 ---
 
@@ -19,7 +19,7 @@
 - [ ] Bulk-buy calculator widget
 - [ ] EOFY/sale calendar indicator in header
 - [ ] Scrape run status / health panel
-- [ ] Tailscale-accessible, Docker-networked
+- [ ] Docker-networked, accessible on the local network
 
 ---
 
@@ -461,53 +461,21 @@ services:
       - bottlebot
 ```
 
-Access via `http://<pi-ip>:8080` on LAN, or `http://bottlebot` via Tailscale if you've set up the subnet router.
-
----
-
-## 11. Ansible deploy task
-
-```yaml
-# ansible/bottlebot.yml (Phase 4 additions)
-- name: Deploy BottleBot web UI
-  hosts: homelab
-  tasks:
-    - name: Ensure bottlebot directory exists
-      file:
-        path: /opt/bottlebot
-        state: directory
-
-    - name: Copy docker-compose.yml
-      copy:
-        src: docker-compose.yml
-        dest: /opt/bottlebot/docker-compose.yml
-
-    - name: Pull and restart containers
-      community.docker.docker_compose_v2:
-        project_src: /opt/bottlebot
-        pull: always
-        state: present
-
-    - name: Open port 8080 in UFW (LAN only)
-      ufw:
-        rule: allow
-        port: 8080
-        src: "192.168.0.0/16"
-```
+Access via `http://<host-ip>:8080` on your local network.
 
 ---
 
 ## Phase 4 acceptance criteria
 
 - [ ] `docker compose up` starts both scraper and web containers cleanly
-- [ ] Dashboard loads at `http://pi-ip:8080` and shows ranked deals
+- [ ] Dashboard loads at `http://localhost:8080` and shows ranked deals
 - [ ] Deal detail page shows price history chart for a product with 7+ days of data
 - [ ] Cross-retailer comparison section shows prices from at least 2 retailers on matched products
 - [ ] Bulk-buy table calculates correctly for qty 1, 6, 12, 24
 - [ ] Watchlist add/remove persists to `criteria.yaml` and immediately affects next score run
 - [ ] Health page shows last 30 scrape runs with status
 - [ ] EOFY banner appears in header during June 15–30
-- [ ] Accessible via Tailscale from phone
+- [ ] Accessible from another device on the local network
 
 ---
 
