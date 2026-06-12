@@ -180,12 +180,16 @@ alembic init src/db/migrations
 ```
 
 In the generated `src/db/migrations/env.py`, point `sqlalchemy.url` at the same `DB_PATH`
-used by `src/db/engine.py`:
+used by `src/db/engine.py`, and set `target_metadata` to the models' `Base.metadata` so
+`--autogenerate` can detect schema changes:
 
 ```python
 # src/db/migrations/env.py (edit)
 from src.db.engine import DB_PATH
+from src.db.models import Base
+
 config.set_main_option("sqlalchemy.url", f"sqlite:///{DB_PATH}")
+target_metadata = Base.metadata
 ```
 
 Then generate and apply the baseline migration:

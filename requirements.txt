@@ -1,0 +1,34 @@
+# requirements.txt
+
+# Phase 1 — scraping & storage
+playwright
+tenacity
+SQLAlchemy
+alembic
+APScheduler
+typer
+
+# Phase 2 — config, scoring & alerts
+pydantic
+pydantic-settings
+python-dotenv
+PyYAML
+python-dateutil
+apprise
+rich
+
+# Phase 3 — additional sources
+httpx
+curl_cffi
+beautifulsoup4
+
+# Phase 4 — web UI
+fastapi
+uvicorn[standard]
+jinja2
+plotly
+
+# Dev & test
+pytest
+respx
+ruff

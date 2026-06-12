@@ -1,0 +1,12 @@
+# docker-compose.yml
+services:
+  bottlebot:
+    build: .
+    container_name: bottlebot
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data        # SQLite DB persists here
+      - ./config:/app/config    # criteria.yaml
+    environment:
+      - DB_PATH=/app/data/bottlebot.db
+      - TZ=Australia/Sydney
