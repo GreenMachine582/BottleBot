@@ -81,7 +81,7 @@ from fastapi import APIRouter, Request, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ...db.models import engine
+from ...db.engine import engine
 from ...scoring.engine import ScoringEngine
 from ...scoring.criteria import load_criteria
 from ...calendar import SaleCalendar
@@ -191,7 +191,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ...db.models import engine, RetailerProduct, PriceHistory
+from ...db.engine import engine
+from ...db.models import RetailerProduct, PriceHistory
 from ...scoring.cross_retailer import compare_product_across_retailers
 import plotly.graph_objects as go
 import plotly.io as pio
@@ -375,7 +376,92 @@ async def remove_from_watchlist(
 
 ---
 
-## 8. Health / scrape status panel
+## 8. Criteria editor
+
+Lets you tune scoring weights and alert thresholds from the browser instead of hand-editing
+`config/criteria.yaml`. Writes go through the same `Criteria` model from Phase 2, so an
+edit that would produce an invalid config (e.g. a non-numeric weight) is rejected before
+it's written to disk.
+
+```python
+# src/web/routes/criteria.py
+from fastapi import APIRouter, Request, Form
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from ...scoring.criteria import load_criteria, Criteria
+import yaml
+
+router = APIRouter()
+templates = Jinja2Templates(directory="src/web/templates")
+
+CRITERIA_PATH = "config/criteria.yaml"
+
+@router.get("/criteria", response_class=HTMLResponse)
+async def get_criteria(request: Request):
+    criteria = load_criteria(CRITERIA_PATH)
+    return templates.TemplateResponse("criteria.html", {
+        "request": request,
+        "criteria": criteria,
+    })
+
+@router.post("/criteria")
+async def update_criteria(
+    request: Request,
+    min_deal_score: float = Form(...),
+    immediate_threshold: float = Form(...),
+    min_discount_pct: float = Form(...),
+    min_saving_aud: float = Form(...),
+):
+    with open(CRITERIA_PATH) as f:
+        raw = yaml.safe_load(f)
+
+    raw["alerts"]["min_deal_score"] = min_deal_score
+    raw["alerts"]["immediate_threshold"] = immediate_threshold
+    raw["thresholds"]["min_discount_pct"] = min_discount_pct
+    raw["thresholds"]["min_saving_aud"] = min_saving_aud
+
+    # Validate before writing — reject the change if it produces an invalid config
+    Criteria.model_validate(raw)
+
+    with open(CRITERIA_PATH, "w") as f:
+        yaml.dump(raw, f, default_flow_style=False)
+
+    return RedirectResponse("/criteria", status_code=303)
+```
+
+```html
+<!-- src/web/templates/criteria.html (excerpt) -->
+{% extends "base.html" %}
+{% block content %}
+<h2>Criteria</h2>
+<form method="post" action="/criteria">
+  <label>Min deal score
+    <input type="number" step="0.1" name="min_deal_score" value="{{ criteria.alerts.min_deal_score }}">
+  </label>
+  <label>Immediate alert threshold
+    <input type="number" step="0.1" name="immediate_threshold" value="{{ criteria.alerts.immediate_threshold }}">
+  </label>
+  <label>Min discount %
+    <input type="number" step="0.1" name="min_discount_pct" value="{{ criteria.thresholds.min_discount_pct }}">
+  </label>
+  <label>Min saving (AUD)
+    <input type="number" step="0.1" name="min_saving_aud" value="{{ criteria.thresholds.min_saving_aud }}">
+  </label>
+  <button type="submit">Save</button>
+</form>
+<p class="hint">
+  Category weights, CPL caps, and brand lists are still edited directly in
+  <code>config/criteria.yaml</code> — add more fields to the form as needed.
+</p>
+{% endblock %}
+```
+
+Changes take effect on the next scoring run (the next scrape's `run_scoring`, or the next
+`python -m src.cli score`) — no container restart needed.
+
+---
+
+## 9. Health / scrape status panel
 
 ```python
 # src/web/routes/health.py
@@ -383,7 +469,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from ...db.models import engine, ScrapeRun
+from ...db.engine import engine
+from ...db.models import ScrapeRun
 
 router = APIRouter()
 templates = Jinja2Templates(directory="src/web/templates")
@@ -407,7 +494,7 @@ The health page shows a table of recent scrape runs: source, start time, duratio
 
 ---
 
-## 9. Base template
+## 10. Base template
 
 Uses [Pico CSS](https://picocss.com/) — classless, semantic HTML, dark mode out of the box. No JS framework.
 
@@ -447,7 +534,7 @@ Uses [Pico CSS](https://picocss.com/) — classless, semantic HTML, dark mode ou
 
 ---
 
-## 10. Docker Compose update
+## 11. Docker Compose update
 
 ```yaml
 # docker-compose.yml (Phase 4 update)
@@ -485,7 +572,7 @@ Access via `http://<host-ip>:8080` on your local network.
 
 ---
 
-## 11. Testing & linting
+## 12. Testing & linting
 
 ```python
 # tests/test_web_dashboard.py
@@ -519,6 +606,7 @@ ruff check .
 - [ ] Cross-retailer comparison section shows prices from at least 2 retailers on matched products
 - [ ] Bulk-buy table calculates correctly for qty 1, 6, 12, 24
 - [ ] Watchlist add/remove persists to `criteria.yaml` and immediately affects next score run
+- [ ] Criteria editor saves valid changes to `criteria.yaml` and rejects invalid ones without writing the file
 - [ ] Health page shows last 30 scrape runs with status
 - [ ] EOFY banner appears in header during June 15–30
 - [ ] Accessible from another device on the local network
@@ -529,11 +617,12 @@ ruff check .
 
 ## Potential Phase 5 ideas (future)
 
-- **Price alerts via iOS/Android push** — ntfy app already handles this; Phase 5 would add rich notifications with product image
+- **Richer push notifications** — Discord's mobile app already covers push via the webhook; Phase 5 could attach product images to apprise notifications (`apobj.notify(..., attach=...)`) for Discord, Pushover, etc.
 - **Automated cart builder** — given a scored deal list, generate a shareable link to a Dan Murphy's cart (if their URL scheme supports it)
 - **Purchase history tracking** — log what you actually bought and at what price; compare to later prices to see if you timed it well
 - **ML-based sale prediction** — with 6+ months of price history, train a simple model to predict when a given product will next go on sale
 - **Cellar inventory integration** — integrate with Vivino or a simple local inventory to avoid buying things you already have in stock
+- **Additional data sources** — The Wine Collective (RSS/scraper, wine-specific deals) and GroceryRun/Staticice (price comparison API, useful for cross-checking and dedup). Not part of Phases 1–3's retailer set; revisit once the core five retailers are stable.
 
 ---
 

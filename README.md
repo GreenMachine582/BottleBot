@@ -41,21 +41,22 @@ Runs as a standalone Docker project — `docker compose up` and you're scraping 
 | First Choice Liquor | Scraper | Coles Group |
 | CellarMasters | Scraper / member API | Wine club pricing available with membership |
 | Vintage Cellars | Scraper | Coles Group |
-| The Wine Collective | RSS / scraper | Good for wine-specific deals |
-| GroceryRun / Staticice | Price comparison API | Cross-check & dedup |
+
+Phase 1 builds Dan Murphy's first; Phase 3 adds the rest. Further sources (The Wine Collective,
+GroceryRun/Staticice) are tracked as [Phase 5 ideas](./PHASE_4.md#potential-phase-5-ideas-future).
 
 ---
 
 ## Tech stack
 
 ```
-Scraping      playwright · requests · httpx · curl_cffi · beautifulsoup4 · selectolax · tenacity
+Scraping      playwright · httpx · curl_cffi · beautifulsoup4 · tenacity
 Storage       sqlite3 · SQLAlchemy · alembic
-Scoring       pydantic · pyyaml · pandas · python-dateutil
+Scoring       pydantic · pyyaml · python-dateutil
 Alerts        apprise (Discord primary · ntfy, email, etc.)
 Config        python-dotenv · pydantic-settings
 Scheduling    APScheduler · cron
-Charts        matplotlib · plotly
+Charts        plotly
 Web UI        FastAPI · htmx · jinja2
 CLI           typer · rich
 Dev & test    pytest · respx · ruff
@@ -85,10 +86,13 @@ bottlebot/
 ├── PHASE_3.md
 ├── PHASE_4.md
 ├── .env.example                # Template for secrets (webhook URLs, API keys)
+├── requirements.txt
+├── pyproject.toml              # ruff + pytest config
 ├── config/
 │   └── criteria.yaml          # User deal criteria & weights (no secrets)
 ├── src/
 │   ├── cli.py                  # typer CLI: scrape, score (dry-run)
+│   ├── run_scoring.py          # Scoring + alert pipeline (Phase 2)
 │   ├── config/
 │   │   └── settings.py        # pydantic-settings, loads .env
 │   ├── scrapers/
@@ -97,7 +101,10 @@ bottlebot/
 │   │   ├── bws.py
 │   │   └── ...
 │   ├── db/
+│   │   ├── engine.py          # Shared SQLAlchemy engine (reads DB_PATH)
 │   │   ├── models.py          # SQLAlchemy models
+│   │   ├── writer.py          # upsert_product — dedup & price-history writes
+│   │   ├── matching.py        # Cross-retailer product matching (Phase 3)
 │   │   └── migrations/        # Alembic migrations
 │   ├── scoring/
 │   │   ├── engine.py          # Deal scoring logic

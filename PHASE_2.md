@@ -554,7 +554,7 @@ def send_digest(apobj: apprise.Apprise, deals: list[DealScore], criteria: Criter
 import logging
 import time
 from sqlalchemy.orm import Session
-from sqlalchemy import create_engine
+from .db.engine import engine
 from .scoring.engine import ScoringEngine
 from .scoring.criteria import load_criteria
 from .config.settings import Settings
@@ -562,8 +562,7 @@ from .alerts.notify import build_apprise, send_alert
 
 log = logging.getLogger(__name__)
 
-def run_scoring(db_path: str = "bottlebot.db", criteria_path: str = "config/criteria.yaml"):
-    engine = create_engine(f"sqlite:///{db_path}")
+def run_scoring(criteria_path: str = "config/criteria.yaml"):
     criteria = load_criteria(criteria_path)
     apobj = build_apprise(Settings())
 
@@ -586,34 +585,63 @@ def run_scoring(db_path: str = "bottlebot.db", criteria_path: str = "config/crit
     return {"immediate": immediate, "digest": digest}
 ```
 
+### Scheduling scoring & digests
+
+Two more jobs join the scrape jobs in `src/scheduler.py`: one that scores and fires immediate
+alerts shortly after each scrape, and a daily digest job at `criteria.alerts.digest_time`.
+
+```python
+# src/scheduler.py (Phase 2 addition)
+from sqlalchemy.orm import Session
+from .db.engine import engine
+from .run_scoring import run_scoring
+from .scoring.engine import ScoringEngine
+from .scoring.criteria import load_criteria
+from .alerts.notify import build_apprise
+from .alerts.digest import send_digest
+from .config.settings import Settings
+
+def run_digest():
+    criteria = load_criteria()
+    with Session(engine) as session:
+        deals = ScoringEngine(session, criteria).score_all_current_deals()
+    send_digest(build_apprise(Settings()), deals, criteria)
+
+# Score + fire immediate alerts ~5 minutes after the Dan Murphy's scrape
+scheduler.add_job(run_scoring, "interval", hours=6, minutes=5)
+
+# Daily digest at criteria.alerts.digest_time (e.g. "08:00" AEST)
+_digest_hour, _digest_minute = (int(p) for p in load_criteria().alerts.digest_time.split(":"))
+scheduler.add_job(run_digest, "cron", hour=_digest_hour, minute=_digest_minute)
+```
+
 ---
 
 ## 8. Dry-run CLI
 
 A small [typer](https://typer.tiangolo.com/) app with [rich](https://rich.readthedocs.io/) table
 output — score the current deal set and print a ranked table without sending any notifications.
+This `score` command lives in the same `src/cli.py` as Phase 1's `scrape` command, sharing the
+one `app = typer.Typer(...)` instance.
 
 ```python
-# src/cli.py
+# src/cli.py (Phase 2 addition)
 import typer
 from rich.console import Console
 from rich.table import Table
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from .db.engine import engine
 from .scoring.engine import ScoringEngine
 from .scoring.criteria import load_criteria
 
-app = typer.Typer(help="BottleBot CLI")
 console = Console()
 
 @app.command()
 def score(
-    db_path: str = typer.Option("bottlebot.db", help="Path to SQLite database"),
     criteria_path: str = typer.Option("config/criteria.yaml", help="Path to criteria config"),
     top: int = typer.Option(20, help="Number of deals to show"),
 ):
     """Score current deals and print a ranked table — no alerts are sent."""
-    engine = create_engine(f"sqlite:///{db_path}")
     criteria = load_criteria(criteria_path)
 
     with Session(engine) as session:
@@ -641,9 +669,6 @@ def score(
         )
 
     console.print(table)
-
-if __name__ == "__main__":
-    app()
 ```
 
 ```bash

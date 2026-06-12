@@ -96,9 +96,9 @@ CREATE TABLE scrape_runs (
 from datetime import datetime
 from sqlalchemy import (
     Boolean, Column, DateTime, Float, ForeignKey,
-    Integer, String, Text, create_engine
+    Integer, String, Text
 )
-from sqlalchemy.orm import DeclarativeBase, relationship, Session
+from sqlalchemy.orm import DeclarativeBase, relationship
 
 class Base(DeclarativeBase):
     pass
@@ -150,6 +150,49 @@ class ScrapeRun(Base):
     products_seen   = Column(Integer, default=0)
     prices_inserted = Column(Integer, default=0)
     error_msg       = Column(Text)
+```
+
+### Shared engine (`src/db/engine.py`)
+
+A single SQLAlchemy engine, reused by the scheduler, scoring pipeline, CLI, and web UI, so they
+all read and write the same SQLite file. It respects the `DB_PATH` env var set in
+`docker-compose.yml` — without this, code defaulting to `sqlite:///bottlebot.db` would write to
+`/app/bottlebot.db` inside the container instead of the `/app/data/bottlebot.db` path on the
+mounted volume, and the database would be lost every time the container is rebuilt.
+
+```python
+# src/db/engine.py
+import os
+from sqlalchemy import create_engine
+
+DB_PATH = os.environ.get("DB_PATH", "bottlebot.db")
+engine = create_engine(f"sqlite:///{DB_PATH}")
+```
+
+### Schema migrations (Alembic)
+
+`Base.metadata.create_all(engine)` (used in the scheduler below) is enough to get the tables
+created for local development. Set up Alembic once you're ready to evolve the schema across
+machines/containers without dropping data:
+
+```bash
+alembic init src/db/migrations
+```
+
+In the generated `src/db/migrations/env.py`, point `sqlalchemy.url` at the same `DB_PATH`
+used by `src/db/engine.py`:
+
+```python
+# src/db/migrations/env.py (edit)
+from src.db.engine import DB_PATH
+config.set_main_option("sqlalchemy.url", f"sqlite:///{DB_PATH}")
+```
+
+Then generate and apply the baseline migration:
+
+```bash
+alembic revision --autogenerate -m "initial schema"
+alembic upgrade head
 ```
 
 ---
@@ -390,7 +433,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from .scrapers.danmurphys import DanMurphysScraper
 from .db.writer import upsert_product
 from .db.models import ScrapeRun, Base
-from sqlalchemy import create_engine
+from .db.engine import engine
 from sqlalchemy.orm import Session
 from datetime import datetime
 import logging
@@ -398,13 +441,12 @@ import logging
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-ENGINE = create_engine("sqlite:///bottlebot.db")
-Base.metadata.create_all(ENGINE)
+Base.metadata.create_all(engine)
 
 def run_scraper(scraper_cls, source_name: str):
     log.info(f"Starting scrape: {source_name}")
     run = ScrapeRun(source=source_name, started_at=datetime.utcnow(), status="running")
-    with Session(ENGINE) as session:
+    with Session(engine) as session:
         session.add(run)
         session.commit()
         try:
@@ -482,20 +524,76 @@ python -m src.cli scrape --source danmurphys
 
 ---
 
-## 6. Docker setup
+## 6. Dependencies & tooling config
+
+One `requirements.txt` at the repo root covers the whole project — later phases just append
+to it. Pin exact versions with `pip freeze > requirements.txt` once Phase 1 is working locally;
+the list below is the minimum set of top-level packages.
+
+```txt
+# requirements.txt
+
+# Phase 1 — scraping & storage
+playwright
+tenacity
+SQLAlchemy
+alembic
+APScheduler
+typer
+
+# Phase 2 — config, scoring & alerts
+pydantic
+pydantic-settings
+python-dotenv
+PyYAML
+python-dateutil
+apprise
+rich
+
+# Phase 3 — additional sources
+httpx
+curl_cffi
+beautifulsoup4
+
+# Phase 4 — web UI
+fastapi
+uvicorn[standard]
+jinja2
+plotly
+
+# Dev & test
+pytest
+respx
+ruff
+```
+
+Ruff and pytest settings live in `pyproject.toml` at the repo root:
+
+```toml
+# pyproject.toml
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+```
+
+---
+
+## 7. Docker setup
 
 ```dockerfile
 # Dockerfile
 FROM python:3.12-slim
 
-RUN apt-get update && apt-get install -y \
-    chromium chromium-driver \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN playwright install chromium
+RUN playwright install --with-deps chromium
 
 COPY . .
 
@@ -519,7 +617,7 @@ services:
 
 ---
 
-## 7. Testing
+## 8. Testing
 
 The DB writer's dedup logic is the highest-value thing to test in Phase 1 — it's pure
 SQLAlchemy against an in-memory SQLite DB, so no Playwright/browser needed.
@@ -579,7 +677,7 @@ Run `ruff check .` and `ruff format .` before committing — both are fast enoug
 
 ---
 
-## 8. Phase 1 acceptance criteria
+## Phase 1 acceptance criteria
 
 - [ ] `docker compose up` starts the scheduler cleanly
 - [ ] First scrape run completes, `scrape_runs` table shows `status = 'success'`

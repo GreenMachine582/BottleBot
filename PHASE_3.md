@@ -226,6 +226,8 @@ class LiquorlandScraper(BaseScraper):
 ```
 
 > First Choice Liquor follows an almost identical pattern — create `firstchoice.py` by copying `liquorland.py` and updating `DEALS_URL` and `retailer = "firstchoice"`.
+>
+> Vintage Cellars is also a Coles Group property — `vintagecellars.py` follows the same curl_cffi + JSON-LD pattern again, with `DEALS_URL` and `retailer = "vintagecellars"` updated accordingly.
 
 ---
 
@@ -340,7 +342,51 @@ def find_matching_product(
     return None
 ```
 
-Update `upsert_product` in Phase 1's writer to use `find_matching_product` before creating a new `Product` row.
+### Updating `upsert_product`
+
+Phase 1's `upsert_product` (`src/db/writer.py`) only looked up `RetailerProduct` by
+`(retailer, url)` — fine when there's a single retailer, but Phase 3 needs new
+`RetailerProduct` rows to attach to an existing `Product` if the same bottle is already
+known from another retailer. When no `RetailerProduct` exists yet, try
+`find_matching_product` before creating a brand-new `Product`:
+
+```python
+# src/db/writer.py (Phase 3 update)
+from .matching import find_matching_product
+
+def upsert_product(session: Session, scraped: ScrapedProduct) -> tuple[RetailerProduct, bool]:
+    rp = session.query(RetailerProduct).filter_by(
+        retailer=scraped.retailer,
+        url=scraped.url
+    ).first()
+
+    if not rp:
+        product = find_matching_product(
+            session, scraped.name, scraped.brand, scraped.volume_ml
+        )
+        if not product:
+            product = Product(
+                name=scraped.name,
+                brand=scraped.brand,
+                category=scraped.category,
+                volume_ml=scraped.volume_ml,
+                abv=scraped.abv,
+            )
+            session.add(product)
+            session.flush()
+
+        rp = RetailerProduct(
+            product_id=product.id,
+            retailer=scraped.retailer,
+            retailer_sku=scraped.retailer_sku,
+            url=scraped.url,
+            image_url=scraped.image_url,
+        )
+        session.add(rp)
+        session.flush()
+
+    # ... price-change check is unchanged from Phase 1
+```
 
 ---
 
