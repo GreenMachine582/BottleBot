@@ -617,6 +617,9 @@ services:
     environment:
       - DB_PATH=/app/data/bottlebot.db
       - TZ=Australia/Sydney
+      # Set to "true" to record Dan Murphy's member pricing as price_aud
+      # (with the non-member price in was_price_aud). Default: non-member.
+      - DANMURPHYS_MEMBER=false
 ```
 
 ---
@@ -699,6 +702,7 @@ Run `ruff check .` and `ruff format .` before committing — both are fast enoug
 - **Headless Chromium on ARM hosts:** Playwright's bundled Chromium is x86-only. On ARM64 hosts, install the system Chromium and point Playwright at it via `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser`.
 - **Volume parsing:** Names like "700mL", "700 mL", "70cl", "1.125L" all appear in the wild. The regex handles mL/L but watch for cl (centilitre) variants on imported products.
 - **tenacity retries and `session.commit()`:** the `@retry` on `_goto` only covers navigation — if a transient failure happens mid-page (e.g. a selector query throws), it propagates up to `run_scraper`'s `except` block and the whole run is marked `failed`. That's fine for Phase 1 (the next scheduled run picks it up), but don't be tempted to wrap the entire `scrape_deals()` generator in `@retry` — partial results would be re-yielded from the start and double-counted in `seen`/`inserted`.
+- **`DANMURPHYS_MEMBER`:** some product cards show a "MEMBER OFFER" price alongside a "Non-Member: $X" reference price. By default (`DANMURPHYS_MEMBER=false` / unset) the scraper records the **non-member** price as `price_aud`. Set `DANMURPHYS_MEMBER=true` (or `1`/`yes`) to record the **member** price as `price_aud` instead, with the non-member price stored in `was_price_aud` for comparison. Cards without a member-offer split are unaffected.
 
 ---
 

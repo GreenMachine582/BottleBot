@@ -1,4 +1,5 @@
 .idea
+.claude/
 
 # Python
 __pycache__/
