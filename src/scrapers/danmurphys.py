@@ -45,6 +45,27 @@ SIZE_REPEAT_RE = re.compile(
 )
 SIZE_TOKEN_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(ML|mL|L)\b")
 
+# --- CSS/element selectors for danmurphys.com.au product cards ---------
+# Centralised so a DOM change only needs updating here. See PHASE_1.md's
+# "Selectors reference" table for what each one targets and how to spot
+# check it against the live site when something breaks.
+SEL_PRODUCT_CARD = "product-card-view"
+SEL_LOAD_MORE = ".infinite-loader__load-more-button"
+SEL_PRODUCT_LINK = "a[href]"
+SEL_PRODUCT_IMAGE = "img"
+
+# "Member offer" card layout
+SEL_MEMBER_PRICE_BOX = ".product-card-cost.bg-member-color"
+SEL_MEMBER_PRICE = ".card-price"
+SEL_MEMBER_UNIT = ".product-card-unit"
+SEL_MEMBER_OFFER_LABEL = ".offer-txt"
+SEL_NON_MEMBER_PRICE = ".offers-normal-tile .value"
+
+# Plain card layout
+SEL_PRICE_CONTAINER = ".price-container"
+SEL_PRICE_VALUE = "[itemprop='price'] .value"
+SEL_PROMO_PRICE = ".promo-price"
+
 
 def _parse_price(text: str | None) -> float | None:
     if not text:
@@ -95,14 +116,14 @@ class DanMurphysScraper(BaseScraper):
         `self.member` (from the `DANMURPHYS_MEMBER` env var) picks which side
         of the member/non-member split becomes `price_aud` vs `was_price_aud`.
         """
-        member_box = card.query_selector(".product-card-cost.bg-member-color")
+        member_box = card.query_selector(SEL_MEMBER_PRICE_BOX)
         if member_box:
-            price_el = member_box.query_selector(".card-price")
-            unit_el = member_box.query_selector(".product-card-unit")
-            offer_el = member_box.query_selector(".offer-txt")
+            price_el = member_box.query_selector(SEL_MEMBER_PRICE)
+            unit_el = member_box.query_selector(SEL_MEMBER_UNIT)
+            offer_el = member_box.query_selector(SEL_MEMBER_OFFER_LABEL)
 
             member_price = _parse_price(price_el.inner_text() if price_el else None)
-            non_member_el = card.query_selector(".offers-normal-tile .value")
+            non_member_el = card.query_selector(SEL_NON_MEMBER_PRICE)
             non_member_price = _parse_price(
                 non_member_el.inner_text() if non_member_el else None
             )
@@ -117,12 +138,12 @@ class DanMurphysScraper(BaseScraper):
                 return member_price, non_member_price, promo_label
             return non_member_price, None, promo_label
 
-        price_container = card.query_selector(".price-container")
+        price_container = card.query_selector(SEL_PRICE_CONTAINER)
         if price_container:
-            unit_el = price_container.query_selector("[itemprop='price'] .value")
+            unit_el = price_container.query_selector(SEL_PRICE_VALUE)
             price_aud = _parse_price(unit_el.inner_text() if unit_el else None)
 
-            promo_el = price_container.query_selector(".promo-price")
+            promo_el = price_container.query_selector(SEL_PROMO_PRICE)
             promo_label = None
             if promo_el:
                 promo_label = re.sub(r"\s+", " ", promo_el.inner_text()).strip()
@@ -133,7 +154,7 @@ class DanMurphysScraper(BaseScraper):
 
     def _parse_product_card(self, card) -> ScrapedProduct | None:
         try:
-            link_el = card.query_selector("a[href]")
+            link_el = card.query_selector(SEL_PRODUCT_LINK)
             href = link_el.get_attribute("href") if link_el else None
             if not href:
                 return None
@@ -143,7 +164,7 @@ class DanMurphysScraper(BaseScraper):
             # Offers" badges have badge `<img alt="product badge">` elements
             # earlier in the DOM that a bare `card.query_selector("img")`
             # would match instead.
-            img_el = link_el.query_selector("img")
+            img_el = link_el.query_selector(SEL_PRODUCT_IMAGE)
             alt = (img_el.get_attribute("alt") or "") if img_el else ""
             image_url = img_el.get_attribute("src") if img_el else None
 
@@ -218,7 +239,7 @@ class DanMurphysScraper(BaseScraper):
                 page.evaluate("window.scrollBy(0, window.innerHeight)")
                 page.wait_for_timeout(800)
 
-            cards = page.query_selector_all("product-card-view")
+            cards = page.query_selector_all(SEL_PRODUCT_CARD)
             log.info("danmurphys: page %d — %d cards total", page_num, len(cards))
             for card in cards[seen:]:
                 product = self._parse_product_card(card)
@@ -230,7 +251,7 @@ class DanMurphysScraper(BaseScraper):
             # Re-navigating here (e.g. page.goto(page.url)) would reload from
             # scratch, re-yielding the same products and risking a fresh
             # Cloudflare challenge.
-            load_more = page.query_selector(".infinite-loader__load-more-button")
+            load_more = page.query_selector(SEL_LOAD_MORE)
             if not load_more or len(cards) <= seen:
                 break
             seen = len(cards)
