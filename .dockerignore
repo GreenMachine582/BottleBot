@@ -1,0 +1,19 @@
+.git
+.gitignore
+.idea
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets
+.env
+
+# Runtime data
+/data/
+*.db

@@ -1,0 +1,57 @@
+# BottleBot deal criteria & scoring weights.
+# No secrets here — Discord/ntfy URLs live in .env (see .env.example).
+
+alerts:
+  min_deal_score: 65            # 0-100. Deals below this are ignored entirely.
+  immediate_threshold: 85       # Score at or above this fires immediately (bypass digest)
+  digest_time: "08:00"          # Daily digest send time (AEST)
+  digest_max_deals: 10          # Max deals to include in daily digest
+
+web:
+  base_url: "http://localhost:8080"   # Phase 4 dashboard URL — used to build "View on BottleBot" links in alerts
+
+scoring:
+  weights:
+    real_discount_pct: 0.35     # Discount vs 90-day average (not retailer "was")
+    cpl_rating:        0.30     # Cost per litre vs category average
+    bulk_value:        0.20     # Extra savings when buying 12+
+    category_pref:     0.15     # Personal category preference multiplier
+
+  # Bonus/penalty modifiers (additive to base score, capped at 100)
+  modifiers:
+    watchlist_bonus: 20         # Flat bonus for watchlist items
+    eofy_window_bonus: 10       # Bonus during EOFY/Boxing Day/Easter/etc. windows
+    new_low_bonus: 15            # Bonus if this is the all-time lowest scraped price
+
+categories:
+  whisky:   1.4
+  wine_red: 1.2
+  wine_white: 1.0
+  gin:      1.1
+  rum:      1.0
+  vodka:    0.9
+  beer:     0.8
+  cider:    0.7
+  rtd:      0.5
+  wine_sparkling: 1.1
+
+thresholds:
+  min_discount_pct: 20          # Ignore deals with less than 20% real discount
+  min_saving_aud: 10             # Ignore deals saving less than $10 per bottle
+  max_cpl_aud:                   # Skip if $/L still exceeds this after discount
+    whisky:     60
+    wine_red:   25
+    wine_white: 20
+    beer:       8
+    gin:        55
+    default:    30
+
+watchlist:
+  products:
+    - "Johnnie Walker Black Label"
+    - "Penfolds Bin 389"
+  categories: []                # e.g. ["whisky"] to watch all whisky deals
+
+brands:
+  blocklist: []                  # e.g. ["Black Douglas"] — never alert on these
+  allowlist: []                  # Empty = all brands allowed (except blocklist)

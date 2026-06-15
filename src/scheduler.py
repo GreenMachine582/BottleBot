@@ -1,12 +1,18 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from sqlalchemy.orm import Session
 
+from .alerts.digest import send_digest
+from .alerts.notify import build_apprise
+from .config.settings import Settings
 from .db.engine import engine
 from .db.models import Base, ScrapeRun
 from .db.writer import upsert_product
+from .run_scoring import run_scoring
+from .scoring.criteria import load_criteria
+from .scoring.engine import ScoringEngine
 from .scrapers.danmurphys import DanMurphysScraper
 
 logging.basicConfig(level=logging.INFO)
@@ -43,6 +49,13 @@ def run_scraper(scraper_cls, source_name: str):
     log.info(f"Done: {source_name} — {seen} seen, {inserted} new prices")
 
 
+def run_digest():
+    criteria = load_criteria()
+    with Session(engine) as session:
+        deals = ScoringEngine(session, criteria).score_all_current_deals()
+    send_digest(build_apprise(Settings()), deals, criteria)
+
+
 def main():
     scheduler = BlockingScheduler(timezone="Australia/Sydney")
     scheduler.add_job(
@@ -52,6 +65,19 @@ def main():
         args=[DanMurphysScraper, "danmurphys"],
         next_run_time=datetime.now()  # Run immediately on start
     )
+
+    # Score + fire immediate alerts ~5 minutes after each Dan Murphy's scrape
+    scheduler.add_job(
+        run_scoring,
+        "interval",
+        hours=6,
+        next_run_time=datetime.now() + timedelta(minutes=5),
+    )
+
+    # Daily digest at criteria.alerts.digest_time (e.g. "08:00" AEST)
+    digest_hour, digest_minute = (int(p) for p in load_criteria().alerts.digest_time.split(":"))
+    scheduler.add_job(run_digest, "cron", hour=digest_hour, minute=digest_minute)
+
     log.info("BottleBot scheduler started. Running every 6 hours.")
     scheduler.start()
 

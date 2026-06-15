@@ -13,3 +13,7 @@ services:
       # Set to "true" to record Dan Murphy's member pricing as price_aud
       # (with the non-member price in was_price_aud). Default: non-member.
       - DANMURPHYS_MEMBER=false
+      # Notification secrets (Phase 2) — set these in a root .env file
+      # (see .env.example). Missing values default to empty (no alerts sent).
+      - BOTTLEBOT_DISCORD_WEBHOOK_URL=${BOTTLEBOT_DISCORD_WEBHOOK_URL:-}
+      - BOTTLEBOT_NTFY_URL=${BOTTLEBOT_NTFY_URL:-}
