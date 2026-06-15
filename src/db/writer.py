@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from ..scrapers.base import ScrapedProduct
+from .matching import find_matching_product
 from .models import PriceHistory, Product, RetailerProduct
 
 
@@ -17,15 +18,19 @@ def upsert_product(session: Session, scraped: ScrapedProduct) -> tuple[RetailerP
     ).first()
 
     if not rp:
-        product = Product(
-            name=scraped.name,
-            brand=scraped.brand,
-            category=scraped.category,
-            volume_ml=scraped.volume_ml,
-            abv=scraped.abv,
+        product = find_matching_product(
+            session, scraped.name, scraped.brand, scraped.volume_ml
         )
-        session.add(product)
-        session.flush()
+        if not product:
+            product = Product(
+                name=scraped.name,
+                brand=scraped.brand,
+                category=scraped.category,
+                volume_ml=scraped.volume_ml,
+                abv=scraped.abv,
+            )
+            session.add(product)
+            session.flush()
 
         rp = RetailerProduct(
             product_id=product.id,

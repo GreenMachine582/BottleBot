@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..calendar import SaleCalendar
 from ..db.models import PriceHistory, RetailerProduct
+from ..scrapers.utils import calc_cpl
 from .criteria import Criteria
 
 # Rough average CPL ($/L) per category, used to normalise the CPL score.
@@ -110,7 +111,7 @@ class ScoringEngine:
         # CPL calc
         cpl = None
         if product.volume_ml:
-            cpl = latest.price_aud / (product.volume_ml / 1000)
+            cpl = calc_cpl(latest.price_aud, product.volume_ml)
             max_cpl = self.criteria.thresholds.max_cpl_aud.get(
                 product.category or "",
                 self.criteria.thresholds.max_cpl_aud.get("default", 9999),

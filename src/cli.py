@@ -7,13 +7,23 @@ from .db.engine import engine
 from .scheduler import run_scraper
 from .scoring.criteria import load_criteria
 from .scoring.engine import ScoringEngine
+from .scrapers.bws import BWSScraper
+from .scrapers.cellarmasters import CellarMastersScraper
 from .scrapers.danmurphys import DanMurphysScraper
+from .scrapers.firstchoice import FirstChoiceScraper
+from .scrapers.liquorland import LiquorlandScraper
+from .scrapers.vintagecellars import VintageCellarsScraper
 
 app = typer.Typer(help="BottleBot CLI")
 console = Console()
 
 SCRAPERS = {
     "danmurphys": DanMurphysScraper,
+    "bws": BWSScraper,
+    "liquorland": LiquorlandScraper,
+    "firstchoice": FirstChoiceScraper,
+    "cellarmasters": CellarMastersScraper,
+    "vintagecellars": VintageCellarsScraper,
 }
 
 

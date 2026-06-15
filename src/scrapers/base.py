@@ -29,10 +29,13 @@ class BaseScraper(ABC):
         """Yield products currently on deal / in the deals section."""
         ...
 
-    @abstractmethod
     def scrape_category(self, category: str) -> Iterator[ScrapedProduct]:
-        """Yield all products in a given category (for baseline price tracking)."""
-        ...
+        """Yield all products in a given category (for baseline price tracking).
+
+        Optional — only Dan Murphy's implements this so far. Other scrapers
+        raise NotImplementedError until a category endpoint/URL is mapped.
+        """
+        raise NotImplementedError(f"{self.retailer} does not support category scraping")
 
     def scrape_all(self) -> Iterator[ScrapedProduct]:
         """Default: scrape deals only. Override for full catalogue."""

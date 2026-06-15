@@ -13,7 +13,12 @@ from .db.writer import upsert_product
 from .run_scoring import run_scoring
 from .scoring.criteria import load_criteria
 from .scoring.engine import ScoringEngine
+from .scrapers.bws import BWSScraper
+from .scrapers.cellarmasters import CellarMastersScraper
 from .scrapers.danmurphys import DanMurphysScraper
+from .scrapers.firstchoice import FirstChoiceScraper
+from .scrapers.liquorland import LiquorlandScraper
+from .scrapers.vintagecellars import VintageCellarsScraper
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -58,20 +63,49 @@ def run_digest():
 
 def main():
     scheduler = BlockingScheduler(timezone="Australia/Sydney")
+    now = datetime.now()
+
+    # Stagger start times so retailers aren't all hit at once — each job's
+    # own interval stays a clean 6h/12h; only the first run is offset (via
+    # next_run_time). Using `hours=6, minutes=15` etc. on "interval" would
+    # change the *period* to 6h15m, not just the start time.
     scheduler.add_job(
-        run_scraper,
-        "interval",
-        hours=6,
+        run_scraper, "interval", hours=6,
         args=[DanMurphysScraper, "danmurphys"],
-        next_run_time=datetime.now()  # Run immediately on start
+        next_run_time=now,
+    )
+    scheduler.add_job(
+        run_scraper, "interval", hours=6,
+        args=[BWSScraper, "bws"],
+        next_run_time=now + timedelta(minutes=15),
+    )
+    scheduler.add_job(
+        run_scraper, "interval", hours=6,
+        args=[LiquorlandScraper, "liquorland"],
+        next_run_time=now + timedelta(minutes=30),
+    )
+    scheduler.add_job(
+        run_scraper, "interval", hours=6,
+        args=[FirstChoiceScraper, "firstchoice"],
+        next_run_time=now + timedelta(minutes=45),
+    )
+    scheduler.add_job(
+        run_scraper, "interval", hours=12,
+        args=[CellarMastersScraper, "cellarmasters"],
+        next_run_time=now + timedelta(minutes=60),
+    )
+    scheduler.add_job(
+        run_scraper, "interval", hours=12,
+        args=[VintageCellarsScraper, "vintagecellars"],
+        next_run_time=now + timedelta(minutes=75),
     )
 
-    # Score + fire immediate alerts ~5 minutes after each Dan Murphy's scrape
+    # Score + fire immediate alerts ~15 minutes after the last scraper starts
     scheduler.add_job(
         run_scoring,
         "interval",
         hours=6,
-        next_run_time=datetime.now() + timedelta(minutes=5),
+        next_run_time=now + timedelta(minutes=90),
     )
 
     # Daily digest at criteria.alerts.digest_time (e.g. "08:00" AEST)

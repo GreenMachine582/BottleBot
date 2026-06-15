@@ -12,3 +12,6 @@ class Settings(BaseSettings):
 
     # Optional extra apprise target, e.g. ntfy://ntfy.sh/bottlebot-deals
     ntfy_url: str = ""
+
+    # BWS internal API subscription key (Phase 3) — see src/scrapers/bws.py
+    bws_subscription_key: str = ""
