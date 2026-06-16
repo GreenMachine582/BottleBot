@@ -2,6 +2,14 @@
 
 > Automated deal scraper & alert engine for Australian bottle shops — built for the bulk-buying EOFY shopper.
 
+![Phase](https://img.shields.io/badge/phase-3%20of%204-blue)
+![Phase 1](https://img.shields.io/badge/phase%201%20foundation-✅%20complete-brightgreen)
+![Phase 2](https://img.shields.io/badge/phase%202%20intelligence-✅%20complete-brightgreen)
+![Phase 3](https://img.shields.io/badge/phase%203%20breadth-✅%20complete-brightgreen)
+![Phase 4](https://img.shields.io/badge/phase%204%20UX-🚧%20planned-yellow)
+![Python](https://img.shields.io/badge/python-3.12%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
+
 **aka** *DealDiver · SalesSommelier · CaskCrawler · PriceProof*
 
 ---
@@ -67,12 +75,12 @@ Deploy        Docker · Docker Compose
 
 ## Build phases
 
-| Phase | Name | Focus | Doc |
-|---|---|---|---|
-| **1** | Foundation | Scrape & store | [PHASE_1.md](./PHASE_1.md) |
-| **2** | Intelligence | Score & alert | [PHASE_2.md](./PHASE_2.md) |
-| **3** | Breadth | More sources | [PHASE_3.md](./PHASE_3.md) |
-| **4** | UX | Dashboard & tools | [PHASE_4.md](./PHASE_4.md) |
+| Phase | Name | Focus | Status | Doc |
+|---|---|---|---|---|
+| **1** | Foundation | Scrape & store | ✅ Complete | [PHASE_1.md](./PHASE_1.md) |
+| **2** | Intelligence | Score & alert | ✅ Complete | [PHASE_2.md](./PHASE_2.md) |
+| **3** | Breadth | More sources | ✅ Complete | [PHASE_3.md](./PHASE_3.md) |
+| **4** | UX | Dashboard & tools | 🚧 Planned | [PHASE_4.md](./PHASE_4.md) |
 
 ---
 
