@@ -2,11 +2,6 @@
 
 > Automated deal scraper & alert engine for Australian bottle shops — built for the bulk-buying EOFY shopper.
 
-![Phase](https://img.shields.io/badge/phase-3%20of%204-blue)
-![Phase 1](https://img.shields.io/badge/phase%201%20foundation-✅%20complete-brightgreen)
-![Phase 2](https://img.shields.io/badge/phase%202%20intelligence-✅%20complete-brightgreen)
-![Phase 3](https://img.shields.io/badge/phase%203%20breadth-✅%20complete-brightgreen)
-![Phase 4](https://img.shields.io/badge/phase%204%20UX-🚧%20planned-yellow)
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
@@ -80,7 +75,7 @@ Deploy        Docker · Docker Compose
 | **1** | Foundation | Scrape & store | ✅ Complete | [PHASE_1.md](./PHASE_1.md) |
 | **2** | Intelligence | Score & alert | ✅ Complete | [PHASE_2.md](./PHASE_2.md) |
 | **3** | Breadth | More sources | ✅ Complete | [PHASE_3.md](./PHASE_3.md) |
-| **4** | UX | Dashboard & tools | 🚧 Planned | [PHASE_4.md](./PHASE_4.md) |
+| **4** | UX | Dashboard & tools | ✅ Complete | [PHASE_4.md](./PHASE_4.md) |
 
 ---
 
@@ -123,6 +118,16 @@ bottlebot/
 │   ├── calendar.py            # AU sale calendar awareness
 │   ├── scheduler.py           # APScheduler setup
 │   └── web/                   # Phase 4 FastAPI UI
+│       ├── app.py             # FastAPI app, static mount, Jinja2 globals
+│       ├── templating.py      # Shared Jinja2Templates instance
+│       ├── routes/
+│       │   ├── dashboard.py   # GET / — ranked deals
+│       │   ├── deals.py       # GET /deals/{id} + htmx bulk-calc endpoint
+│       │   ├── watchlist.py   # GET/POST /watchlist
+│       │   ├── criteria.py    # GET/POST /criteria
+│       │   └── health.py      # GET /health — scrape run status
+│       ├── templates/         # Jinja2 + Pico CSS templates
+│       └── static/style.css   # Custom overrides (hot-deal rows, banners, etc.)
 ├── tests/
 ├── docker-compose.yml
 └── Dockerfile
@@ -184,22 +189,31 @@ Secrets (Discord webhook URL, BWS API key, etc.) live in a separate `.env` file,
 
 ## Deployment
 
-BottleBot runs as a standalone Docker Compose project — no external infrastructure required.
+BottleBot runs as two Docker Compose services — no external infrastructure required.
 
 ```bash
-# Start the stack
+# Start both the scraper and the web UI
 docker compose up -d
 
-# Run a manual scrape
-docker exec bottlebot python -m src.cli scrape --source danmurphys
+# Dashboard is then available at:
+# http://localhost:8080         (same machine)
+# http://<host-ip>:8080         (other devices on the local network)
 
-# Check deal scores today without sending alerts
-docker exec bottlebot python -m src.cli score --top 20
+# Run a manual scrape
+docker exec bottlebot-scraper python -m src.cli scrape --source danmurphys
+
+# Check deal scores without sending alerts
+docker exec bottlebot-scraper python -m src.cli score --top 20
 ```
 
-Alerts go out via [apprise](https://github.com/caronc/apprise), with Discord as the primary
-channel — ntfy, email, and 100+ other services can be added as extra targets. See
-[PHASE_2.md](./PHASE_2.md) for full alert configuration.
+| Service | Container | Role |
+|---|---|---|
+| `bottlebot` | `bottlebot-scraper` | Runs the scheduler — scrapes all retailers every 6 h, scores deals, fires Discord alerts |
+| `bottlebot-web` | `bottlebot-web` | Serves the FastAPI dashboard on port 8080 |
+
+Both services read from the same SQLite DB (mounted at `./data/bottlebot.db`) and the same `config/criteria.yaml`.
+
+Alerts go out via [apprise](https://github.com/caronc/apprise) — Discord is the primary channel, ntfy and 100+ other services are also supported. See [PHASE_2.md](./PHASE_2.md) for full alert configuration.
 
 ---
 
