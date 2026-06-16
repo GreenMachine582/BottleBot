@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Deals{% endblock %}
+{% block content %}
+
+{% if base_url_mismatch %}
+<article class="base-url-warning">
+  <header>⚠️ Alert link mismatch</header>
+  Alert links in Discord point to <code>{{ configured_base_url }}</code>, but you're
+  viewing this dashboard at <code>{{ request.base_url }}</code>. Update
+  <code>web.base_url</code> in <code>config/criteria.yaml</code> so "View on BottleBot"
+  links work from other devices.
+</article>
+{% endif %}
+
+<h2>Today's deals <small>— {{ deals|length }} above score {{ min_score }}</small></h2>
+
+{% if deals %}
+<div class="overflow-auto">
+<table>
+  <thead>
+    <tr>
+      <th>Score</th>
+      <th>Product</th>
+      <th>Retailer</th>
+      <th>Price</th>
+      <th>Real disc.</th>
+      <th>$/L</th>
+      <th>Buy 12</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for deal in deals %}
+    <tr class="{% if deal.score >= 85 %}hot{% elif deal.is_watchlist %}watchlist{% endif %}">
+      <td>
+        <strong>{{ deal.score }}</strong>
+        {% if deal.is_new_low %}<span title="All-time low">📉</span>{% endif %}
+        {% if deal.is_watchlist %}<span title="On watchlist">⭐</span>{% endif %}
+      </td>
+      <td><a href="/deals/{{ deal.retailer_product_id }}">{{ deal.product_name }}</a></td>
+      <td>{{ deal.retailer }}</td>
+      <td>${{ "%.2f"|format(deal.current_price) }}</td>
+      <td>{{ "%.0f"|format(deal.real_discount_pct) }}%</td>
+      <td>{% if deal.cpl_aud %}${{ "%.2f"|format(deal.cpl_aud) }}{% else %}—{% endif %}</td>
+      <td>{% if deal.bulk_saving_12 %}save ${{ "%.0f"|format(deal.bulk_saving_12) }}{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p>No deals above score {{ min_score }} right now. Run a scrape to update prices.</p>
+<pre><code>docker exec bottlebot python -m src.cli scrape --source danmurphys</code></pre>
+{% endif %}
+
+{% endblock %}

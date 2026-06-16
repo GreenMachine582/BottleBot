@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BottleBot {% block title %}{% endblock %}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="https://unpkg.com/htmx.org@1.9.10/dist/htmx.min.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  {% set sale_window = current_sale_window() %}
+  {% if sale_window %}
+  <div class="sale-banner">
+    🔥 {{ sale_window }} sale window active — thresholds adjusted
+  </div>
+  {% endif %}
+
+  <header class="container">
+    <nav>
+      <ul><li><strong><a href="/" class="contrast">🍺 BottleBot</a></strong></li></ul>
+      <ul>
+        <li><a href="/">Deals</a></li>
+        <li><a href="/watchlist">Watchlist</a></li>
+        <li><a href="/criteria">Criteria</a></li>
+        <li><a href="/health">Health</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="container">
+    <small>BottleBot · Self-hosted · Data updates every 6 h</small>
+  </footer>
+</body>
+</html>

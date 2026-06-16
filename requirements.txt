@@ -27,6 +27,7 @@ fastapi
 uvicorn[standard]
 jinja2
 plotly
+python-multipart
 
 # Dev & test
 pytest

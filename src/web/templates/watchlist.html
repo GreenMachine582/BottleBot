@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Watchlist{% endblock %}
+{% block content %}
+
+<h2>Watchlist</h2>
+<p>Items on the watchlist get a score bonus and trigger immediate alerts at any positive deal score.</p>
+
+<div class="grid">
+  <section>
+    <h3>Products</h3>
+    {% if products %}
+    <ul>
+      {% for name in products %}
+      <li>
+        {{ name }}
+        <form method="post" action="/watchlist/remove" style="display:inline">
+          <input type="hidden" name="product_name" value="{{ name }}">
+          <button type="submit" class="outline secondary small">Remove</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="hint">No products on watchlist.</p>
+    {% endif %}
+
+    <form method="post" action="/watchlist/add">
+      <fieldset role="group">
+        <input type="text" name="product_name" placeholder="e.g. Johnnie Walker Black" required>
+        <button type="submit">Add product</button>
+      </fieldset>
+    </form>
+  </section>
+
+  <section>
+    <h3>Categories</h3>
+    {% if categories %}
+    <ul>
+      {% for cat in categories %}
+      <li>
+        {{ cat }}
+        <form method="post" action="/watchlist/remove" style="display:inline">
+          <input type="hidden" name="category" value="{{ cat }}">
+          <button type="submit" class="outline secondary small">Remove</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="hint">No categories on watchlist.</p>
+    {% endif %}
+
+    <form method="post" action="/watchlist/add">
+      <fieldset role="group">
+        <input type="text" name="category" placeholder="e.g. whisky">
+        <button type="submit">Add category</button>
+      </fieldset>
+    </form>
+  </section>
+</div>
+
+{% endblock %}

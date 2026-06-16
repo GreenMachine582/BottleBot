@@ -2,7 +2,7 @@
 services:
   bottlebot:
     build: .
-    container_name: bottlebot
+    container_name: bottlebot-scraper
     restart: unless-stopped
     volumes:
       - ./data:/app/data        # SQLite DB persists here
@@ -17,3 +17,21 @@ services:
       # (see .env.example). Missing values default to empty (no alerts sent).
       - BOTTLEBOT_DISCORD_WEBHOOK_URL=${BOTTLEBOT_DISCORD_WEBHOOK_URL:-}
       - BOTTLEBOT_NTFY_URL=${BOTTLEBOT_NTFY_URL:-}
+      - BOTTLEBOT_BWS_SUBSCRIPTION_KEY=${BOTTLEBOT_BWS_SUBSCRIPTION_KEY:-}
+    command: python -m src.scheduler
+
+  bottlebot-web:
+    build: .
+    container_name: bottlebot-web
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_PATH=/app/data/bottlebot.db
+      - TZ=Australia/Sydney
+    command: uvicorn src.web.app:app --host 0.0.0.0 --port 8080
+    depends_on:
+      - bottlebot

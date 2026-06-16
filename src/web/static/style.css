@@ -1,0 +1,72 @@
+/* BottleBot custom styles — Pico CSS handles the rest */
+
+/* Sale window banner */
+.sale-banner {
+  background: #7c3b00;
+  color: #ffd580;
+  text-align: center;
+  padding: 0.4rem 1rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* Dashboard: hot deals (score >= 85) */
+tr.hot td {
+  background: rgba(220, 100, 0, 0.12);
+}
+tr.hot td:first-child strong {
+  color: #f28c28;
+}
+
+/* Dashboard: watchlist items */
+tr.watchlist td {
+  background: rgba(91, 202, 165, 0.08);
+}
+
+/* Deal detail: cheapest retailer row */
+tr.best-price td {
+  color: #5bcaa5;
+  font-weight: 600;
+}
+
+/* Bulk-buy calculator: highlighted quantity row */
+tr.highlight td {
+  background: rgba(255, 255, 255, 0.05);
+  font-weight: 600;
+}
+
+/* Base-URL mismatch warning */
+.base-url-warning {
+  border-left: 4px solid #f5c518;
+}
+
+/* Criteria / other error banners */
+.error-banner {
+  border-left: 4px solid #e05555;
+}
+.error-banner pre {
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+}
+
+/* Failed scrape run row */
+tr.failed-run td {
+  color: #e05555;
+}
+
+/* Table overflow wrapper */
+.overflow-auto {
+  overflow-x: auto;
+}
+
+/* Muted hint text */
+.hint {
+  color: var(--pico-muted-color);
+  font-size: 0.85rem;
+}
+
+/* Small remove buttons in watchlist */
+button.small {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+}

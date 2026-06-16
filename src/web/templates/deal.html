@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}{{ product.name if product else "Deal" }}{% endblock %}
+{% block content %}
+
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/">Deals</a></li>
+    <li>{{ product.name if product else rp.id }}</li>
+  </ul>
+</nav>
+
+<div class="grid">
+  <div>
+    <h2>{{ product.name if product else "Product" }}</h2>
+    <p>
+      {% if latest %}
+        <strong>${{ "%.2f"|format(latest.price_aud) }}</strong>
+        {% if latest.was_price_aud %}&nbsp;<del>${{ "%.2f"|format(latest.was_price_aud) }}</del>{% endif %}
+      {% endif %}
+      {% if product and product.volume_ml %}&nbsp;· {{ product.volume_ml }} mL{% endif %}
+      {% if deal_score and deal_score.cpl_aud %}&nbsp;· ${{ "%.2f"|format(deal_score.cpl_aud) }}/L{% endif %}
+    </p>
+    {% if latest and latest.promo_label %}<p><mark>{{ latest.promo_label }}</mark></p>{% endif %}
+    {% if rp %}<p><a href="{{ rp.url }}" target="_blank" rel="noopener">View at {{ rp.retailer }} ↗</a></p>{% endif %}
+  </div>
+
+  {% if deal_score %}
+  <div>
+    <h3>Score: {{ deal_score.score }}</h3>
+    {% if deal_score.is_new_low %}<p>📉 All-time low price</p>{% endif %}
+    {% if deal_score.is_watchlist %}<p>⭐ On your watchlist</p>{% endif %}
+    <p>Real discount: {{ "%.1f"|format(deal_score.real_discount_pct) }}% vs 90-day average</p>
+    <table>
+      <thead><tr><th>Component</th><th>Points</th></tr></thead>
+      <tbody>
+        <tr><td>Discount depth</td><td>{{ deal_score.score_breakdown.discount }}</td></tr>
+        <tr><td>Cost per litre</td><td>{{ deal_score.score_breakdown.cpl }}</td></tr>
+        <tr><td>Bulk-buy value</td><td>{{ deal_score.score_breakdown.bulk }}</td></tr>
+        <tr><td>Category preference</td><td>{{ deal_score.score_breakdown.category }}</td></tr>
+        {% if deal_score.score_breakdown.modifiers > 0 %}
+        <tr><td>Bonuses</td><td>+{{ deal_score.score_breakdown.modifiers }}</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+{% if chart_html %}
+<section>
+  <h3>Price history</h3>
+  {{ chart_html | safe }}
+</section>
+{% endif %}
+
+{% if cross %}
+<section>
+  <h3>Across retailers</h3>
+  <table>
+    <thead>
+      <tr><th>Retailer</th><th>Price</th><th></th></tr>
+    </thead>
+    <tbody>
+    {% for p in cross.prices %}
+      <tr {% if p.retailer == cross.best_retailer %}class="best-price"{% endif %}>
+        <td>{{ p.retailer }}{% if p.on_sale %} <small>🏷 sale</small>{% endif %}</td>
+        <td>${{ "%.2f"|format(p.price) }}</td>
+        <td><a href="{{ p.url }}" target="_blank" rel="noopener">↗</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="hint">Price spread: {{ cross.spread_pct }}% between cheapest and most expensive.</p>
+</section>
+{% endif %}
+
+{% if latest %}
+<section>
+  <h3>Bulk-buy calculator</h3>
+  <label>
+    Quantity: <output id="qty-display">12</output>
+    <input type="range" min="1" max="48" value="12" id="qty-slider"
+      hx-get="/deals/{{ rp.id }}/bulkcalc"
+      hx-trigger="input changed delay:150ms"
+      hx-target="#bulk-table"
+      hx-include="this"
+      name="qty">
+  </label>
+  <script>
+    document.getElementById("qty-slider").addEventListener("input", function () {
+      document.getElementById("qty-display").value = this.value;
+    });
+  </script>
+  <div id="bulk-table">
+    {% with quantities=quantities, selected_qty=selected_qty %}
+      {% include "_bulkcalc_table.html" %}
+    {% endwith %}
+  </div>
+</section>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,25 @@
+{% if latest %}
+<table>
+  <thead>
+    <tr>
+      <th>Qty</th>
+      <th>Total cost</th>
+      {% if avg_90d %}<th>Saving vs 90-day avg</th>{% endif %}
+      <th>$/unit</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for q in quantities %}
+    <tr class="{% if q == selected_qty and q not in [1,6,12,24] %}highlight{% elif q == 12 %}highlight{% endif %}">
+      <td>{{ q }}</td>
+      <td>${{ "%.2f"|format(latest.price_aud * q) }}</td>
+      {% if avg_90d %}
+      <td>${{ "%.2f"|format((avg_90d - latest.price_aud) * q) }}</td>
+      {% endif %}
+      <td>${{ "%.2f"|format(latest.price_aud) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="hint">Qty 12 highlighted — typical free-delivery threshold.</p>
+{% endif %}
