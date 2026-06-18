@@ -8,58 +8,59 @@
 </p>
 
 {% if error %}
-<article class="error-banner">
-  <header>⚠️ Invalid values — changes not saved</header>
-  <pre>{{ error }}</pre>
-</article>
+<div class="alert alert-danger error-banner" role="alert">
+  <h6 class="alert-heading mb-1">⚠️ Invalid values — changes not saved</h6>
+  <pre class="mb-0">{{ error }}</pre>
+</div>
 {% endif %}
 
 <form method="post" action="/criteria">
-  <div class="grid">
-    <section>
+  <div class="row g-4">
+    <div class="col-md-6">
       <h3>Alerts</h3>
-      <label>
-        Min deal score (0–100)
-        <input type="number" step="0.1" min="0" max="100"
-          name="min_deal_score" value="{{ criteria.alerts.min_deal_score }}">
-        <small>Deals below this score are ignored entirely.</small>
-      </label>
-      <label>
-        Immediate alert threshold
-        <input type="number" step="0.1" min="0" max="100"
-          name="immediate_threshold" value="{{ criteria.alerts.immediate_threshold }}">
-        <small>Deals at or above this score fire an alert straight away rather than waiting for the digest.</small>
-      </label>
-    </section>
+      <div class="mb-3">
+        <label class="form-label" for="min_deal_score">Min deal score (0–100)</label>
+        <input type="number" step="0.1" min="0" max="100" class="form-control"
+          id="min_deal_score" name="min_deal_score" value="{{ criteria.alerts.min_deal_score }}">
+        <div class="form-text">Deals below this score are ignored entirely.</div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="immediate_threshold">Immediate alert threshold</label>
+        <input type="number" step="0.1" min="0" max="100" class="form-control"
+          id="immediate_threshold" name="immediate_threshold" value="{{ criteria.alerts.immediate_threshold }}">
+        <div class="form-text">Deals at or above this score fire an alert straight away rather than waiting for the digest.</div>
+      </div>
+    </div>
 
-    <section>
+    <div class="col-md-6">
       <h3>Thresholds</h3>
-      <label>
-        Min real discount %
-        <input type="number" step="0.1" min="0"
-          name="min_discount_pct" value="{{ criteria.thresholds.min_discount_pct }}">
-        <small>Discount vs 90-day average, not the retailer's "was" price.</small>
-      </label>
-      <label>
-        Min saving (AUD)
-        <input type="number" step="0.1" min="0"
-          name="min_saving_aud" value="{{ criteria.thresholds.min_saving_aud }}">
-        <small>Absolute dollar saving per unit.</small>
-      </label>
-    </section>
+      <div class="mb-3">
+        <label class="form-label" for="min_discount_pct">Min real discount %</label>
+        <input type="number" step="0.1" min="0" class="form-control"
+          id="min_discount_pct" name="min_discount_pct" value="{{ criteria.thresholds.min_discount_pct }}">
+        <div class="form-text">Discount vs 90-day average, not the retailer's "was" price.</div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="min_saving_aud">Min saving (AUD)</label>
+        <input type="number" step="0.1" min="0" class="form-control"
+          id="min_saving_aud" name="min_saving_aud" value="{{ criteria.thresholds.min_saving_aud }}">
+        <div class="form-text">Absolute dollar saving per unit.</div>
+      </div>
+    </div>
   </div>
 
-  <button type="submit">Save</button>
+  <button type="submit" class="btn btn-primary">Save</button>
 </form>
 
-<p class="hint">
+<p class="hint mt-3">
   Category weights, CPL caps, brand lists, and scoring weights are still edited directly
   in <code>config/criteria.yaml</code>. Note: saving via the UI will reformat the YAML
   file (comments are not preserved).
 </p>
 
 <h3>Current scoring weights</h3>
-<table>
+<div class="table-responsive">
+<table class="table table-sm">
   <thead><tr><th>Component</th><th>Weight</th></tr></thead>
   <tbody>
     <tr><td>Real discount %</td><td>{{ criteria.scoring.weights.real_discount_pct }}</td></tr>
@@ -68,10 +69,12 @@
     <tr><td>Category preference</td><td>{{ criteria.scoring.weights.category_pref }}</td></tr>
   </tbody>
 </table>
+</div>
 
 <h3>Current category multipliers</h3>
 {% if criteria.categories %}
-<table>
+<div class="table-responsive">
+<table class="table table-sm">
   <thead><tr><th>Category</th><th>Multiplier</th></tr></thead>
   <tbody>
   {% for cat, mult in criteria.categories.items() %}
@@ -79,6 +82,7 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% else %}
 <p class="hint">No category multipliers configured.</p>
 {% endif %}

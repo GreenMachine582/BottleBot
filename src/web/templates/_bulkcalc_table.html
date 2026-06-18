@@ -1,5 +1,6 @@
 {% if latest %}
-<table>
+<div class="table-responsive">
+<table class="table table-sm align-middle">
   <thead>
     <tr>
       <th>Qty</th>
@@ -21,5 +22,6 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 <p class="hint">Qty 12 highlighted — typical free-delivery threshold.</p>
 {% endif %}

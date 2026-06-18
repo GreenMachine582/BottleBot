@@ -3,19 +3,19 @@
 {% block content %}
 
 <nav aria-label="breadcrumb">
-  <ul>
-    <li><a href="/">Deals</a></li>
-    <li>{{ product.name if product else rp.id }}</li>
-  </ul>
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/">Deals</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ product.name if product else rp.id }}</li>
+  </ol>
 </nav>
 
-<div class="grid">
-  <div>
+<div class="row g-4">
+  <div class="col-md-6">
     <h2>{{ product.name if product else "Product" }}</h2>
     <p>
       {% if latest %}
-        <strong>${{ "%.2f"|format(latest.price_aud) }}</strong>
-        {% if latest.was_price_aud %}&nbsp;<del>${{ "%.2f"|format(latest.was_price_aud) }}</del>{% endif %}
+        <strong class="fs-4">${{ "%.2f"|format(latest.price_aud) }}</strong>
+        {% if latest.was_price_aud %}&nbsp;<del class="text-secondary">${{ "%.2f"|format(latest.was_price_aud) }}</del>{% endif %}
       {% endif %}
       {% if product and product.volume_ml %}&nbsp;· {{ product.volume_ml }} mL{% endif %}
       {% if deal_score and deal_score.cpl_aud %}&nbsp;· ${{ "%.2f"|format(deal_score.cpl_aud) }}/L{% endif %}
@@ -25,12 +25,12 @@
   </div>
 
   {% if deal_score %}
-  <div>
+  <div class="col-md-6">
     <h3>Score: {{ deal_score.score }}</h3>
     {% if deal_score.is_new_low %}<p>📉 All-time low price</p>{% endif %}
     {% if deal_score.is_watchlist %}<p>⭐ On your watchlist</p>{% endif %}
     <p>Real discount: {{ "%.1f"|format(deal_score.real_discount_pct) }}% vs 90-day average</p>
-    <table>
+    <table class="table table-sm">
       <thead><tr><th>Component</th><th>Points</th></tr></thead>
       <tbody>
         <tr><td>Discount depth</td><td>{{ deal_score.score_breakdown.discount }}</td></tr>
@@ -47,51 +47,53 @@
 </div>
 
 {% if chart_html %}
-<section>
+<section class="mt-4">
   <h3>Price history</h3>
   {{ chart_html | safe }}
 </section>
 {% endif %}
 
 {% if cross %}
-<section>
+<section class="mt-4">
   <h3>Across retailers</h3>
-  <table>
+  <div class="table-responsive">
+  <table class="table table-hover align-middle">
     <thead>
       <tr><th>Retailer</th><th>Price</th><th></th></tr>
     </thead>
     <tbody>
     {% for p in cross.prices %}
       <tr {% if p.retailer == cross.best_retailer %}class="best-price"{% endif %}>
-        <td>{{ p.retailer }}{% if p.on_sale %} <small>🏷 sale</small>{% endif %}</td>
+        <td>{{ p.retailer }}{% if p.on_sale %} <span class="badge text-bg-info">🏷 sale</span>{% endif %}</td>
         <td>${{ "%.2f"|format(p.price) }}</td>
         <td><a href="{{ p.url }}" target="_blank" rel="noopener">↗</a></td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
   <p class="hint">Price spread: {{ cross.spread_pct }}% between cheapest and most expensive.</p>
 </section>
 {% endif %}
 
 {% if latest %}
-<section>
+<section class="mt-4">
   <h3>Bulk-buy calculator</h3>
-  <label>
+  <label for="qty-slider" class="form-label">
     Quantity: <output id="qty-display">12</output>
-    <input type="range" min="1" max="48" value="12" id="qty-slider"
-      hx-get="/deals/{{ rp.id }}/bulkcalc"
-      hx-trigger="input changed delay:150ms"
-      hx-target="#bulk-table"
-      hx-include="this"
-      name="qty">
   </label>
+  <input type="range" class="form-range" min="1" max="48" value="12" id="qty-slider"
+    hx-get="/deals/{{ rp.id }}/bulkcalc"
+    hx-trigger="input changed delay:150ms"
+    hx-target="#bulk-table"
+    hx-include="this"
+    name="qty">
   <script>
     document.getElementById("qty-slider").addEventListener("input", function () {
       document.getElementById("qty-display").value = this.value;
     });
   </script>
-  <div id="bulk-table">
+  <div id="bulk-table" class="mt-3">
     {% with quantities=quantities, selected_qty=selected_qty %}
       {% include "_bulkcalc_table.html" %}
     {% endwith %}

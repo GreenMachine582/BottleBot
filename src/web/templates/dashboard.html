@@ -3,20 +3,20 @@
 {% block content %}
 
 {% if base_url_mismatch %}
-<article class="base-url-warning">
-  <header>⚠️ Alert link mismatch</header>
+<div class="alert alert-warning base-url-warning" role="alert">
+  <h6 class="alert-heading mb-1">⚠️ Alert link mismatch</h6>
   Alert links in Discord point to <code>{{ configured_base_url }}</code>, but you're
   viewing this dashboard at <code>{{ request.base_url }}</code>. Update
   <code>web.base_url</code> in <code>config/criteria.yaml</code> so "View on BottleBot"
   links work from other devices.
-</article>
+</div>
 {% endif %}
 
-<h2>Today's deals <small>— {{ deals|length }} above score {{ min_score }}</small></h2>
+<h2>Today's deals <small class="text-secondary">— {{ deals|length }} above score {{ min_score }}</small></h2>
 
 {% if deals %}
-<div class="overflow-auto">
-<table>
+<div class="table-responsive">
+<table class="table table-hover align-middle">
   <thead>
     <tr>
       <th>Score</th>
@@ -41,7 +41,7 @@
       <td>${{ "%.2f"|format(deal.current_price) }}</td>
       <td>{{ "%.0f"|format(deal.real_discount_pct) }}%</td>
       <td>{% if deal.cpl_aud %}${{ "%.2f"|format(deal.cpl_aud) }}{% else %}—{% endif %}</td>
-      <td>{% if deal.bulk_saving_12 %}save ${{ "%.0f"|format(deal.bulk_saving_12) }}{% endif %}</td>
+      <td>{% if deal.bulk_saving_12 %}<span class="badge text-bg-success">save ${{ "%.0f"|format(deal.bulk_saving_12) }}</span>{% endif %}</td>
     </tr>
   {% endfor %}
   </tbody>

@@ -60,7 +60,7 @@ Alerts        apprise (Discord primary · ntfy, email, etc.)
 Config        python-dotenv · pydantic-settings
 Scheduling    APScheduler · cron
 Charts        plotly
-Web UI        FastAPI · htmx · jinja2
+Web UI        FastAPI · htmx · jinja2 · Bootstrap 5
 CLI           typer · rich
 Dev & test    pytest · respx · ruff
 Deploy        Docker · Docker Compose
@@ -126,7 +126,7 @@ bottlebot/
 │       │   ├── watchlist.py   # GET/POST /watchlist
 │       │   ├── criteria.py    # GET/POST /criteria
 │       │   └── health.py      # GET /health — scrape run status
-│       ├── templates/         # Jinja2 + Pico CSS templates
+│       ├── templates/         # Jinja2 + Bootstrap 5 templates
 │       └── static/style.css   # Custom overrides (hot-deal rows, banners, etc.)
 ├── tests/
 ├── docker-compose.yml

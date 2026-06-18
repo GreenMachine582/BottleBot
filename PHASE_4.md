@@ -1,6 +1,6 @@
 # Phase 4 — UX: Dashboard & Tools
 
-> **Goal:** A simple self-hosted web UI to browse current deals, manage your watchlist and criteria, view price history charts, and run the bulk-buy calculator. FastAPI backend with htmx-powered frontend — no JavaScript framework required.
+> **Goal:** A simple self-hosted web UI to browse current deals, manage your watchlist and criteria, view price history charts, and run the bulk-buy calculator. FastAPI backend with htmx-powered frontend, styled with Bootstrap 5 — no JavaScript framework required.
 
 **Status:** ✅ Complete
 
@@ -41,7 +41,7 @@ src/web/
 │   ├── criteria.py     # GET /criteria · POST /criteria
 │   └── health.py       # GET /health
 ├── templates/
-│   ├── base.html       # Pico CSS layout, nav, sale banner
+│   ├── base.html       # Bootstrap 5 layout, navbar, sale banner, local-datetime JS
 │   ├── dashboard.html
 │   ├── deal.html
 │   ├── _bulkcalc_table.html  # htmx partial — just the bulk-buy table rows
@@ -49,7 +49,7 @@ src/web/
 │   ├── criteria.html
 │   └── health.html
 └── static/
-    └── style.css       # Custom overrides (Pico CSS handles the rest)
+    └── style.css       # Custom overrides (Bootstrap 5 handles the rest)
 ```
 
 Run locally with: `uvicorn src.web.app:app --host 0.0.0.0 --port 8080`
@@ -58,9 +58,9 @@ Run locally with: `uvicorn src.web.app:app --host 0.0.0.0 --port 8080`
 
 ## 2. Templates and styling
 
-[`src/web/templates/base.html`](./src/web/templates/base.html) — [Pico CSS](https://picocss.com/) (classless, semantic HTML, dark mode out of the box) loaded from CDN. htmx also loaded from CDN — no build step, no bundler. The base template calls `current_sale_window()` (a Jinja2 global registered in `app.py`) so the sale banner appears on every page without each route having to pass it.
+[`src/web/templates/base.html`](./src/web/templates/base.html) — [Bootstrap 5](https://getbootstrap.com/) (`data-bs-theme="dark"`) loaded from CDN, with a Bootstrap navbar, alert-based sale banner, and footer. htmx also loaded from CDN — no build step, no bundler. The base template calls `current_sale_window()` (a Jinja2 global registered in `app.py`) so the sale banner appears on every page without each route having to pass it.
 
-[`src/web/static/style.css`](./src/web/static/style.css) adds a minimal layer on top of Pico:
+[`src/web/static/style.css`](./src/web/static/style.css) adds a minimal layer on top of Bootstrap:
 
 | Class | Used for |
 |---|---|
@@ -110,7 +110,7 @@ Run locally with: `uvicorn src.web.app:app --host 0.0.0.0 --port 8080`
 
 ## 7. Health panel (`/health`)
 
-[`src/web/routes/health.py`](./src/web/routes/health.py) — queries the last 30 `ScrapeRun` rows ordered by `started_at` desc. The table shows source, start time, duration in seconds, products seen, new prices inserted, and a ✅/❌/⏳ status icon. Failed runs show their `error_msg` in a collapsible `<details>` element.
+[`src/web/routes/health.py`](./src/web/routes/health.py) — queries the last 30 `ScrapeRun` rows ordered by `started_at` desc. The table shows source, start time (rendered in the viewer's browser-local timezone via the `data-utc` mechanism described in §2), duration in seconds, products seen, new prices inserted, and a ✅/❌/⏳ status badge. Failed runs show their `error_msg` in a collapsible `<details>` element.
 
 ---
 

@@ -5,17 +5,17 @@
 <h2>Watchlist</h2>
 <p>Items on the watchlist get a score bonus and trigger immediate alerts at any positive deal score.</p>
 
-<div class="grid">
-  <section>
+<div class="row g-4">
+  <div class="col-md-6">
     <h3>Products</h3>
     {% if products %}
-    <ul>
+    <ul class="list-group mb-3">
       {% for name in products %}
-      <li>
+      <li class="list-group-item d-flex justify-content-between align-items-center">
         {{ name }}
-        <form method="post" action="/watchlist/remove" style="display:inline">
+        <form method="post" action="/watchlist/remove" class="mb-0">
           <input type="hidden" name="product_name" value="{{ name }}">
-          <button type="submit" class="outline secondary small">Remove</button>
+          <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
         </form>
       </li>
       {% endfor %}
@@ -25,23 +25,23 @@
     {% endif %}
 
     <form method="post" action="/watchlist/add">
-      <fieldset role="group">
-        <input type="text" name="product_name" placeholder="e.g. Johnnie Walker Black" required>
-        <button type="submit">Add product</button>
-      </fieldset>
+      <div class="input-group">
+        <input type="text" class="form-control" name="product_name" placeholder="e.g. Johnnie Walker Black" required>
+        <button type="submit" class="btn btn-primary">Add product</button>
+      </div>
     </form>
-  </section>
+  </div>
 
-  <section>
+  <div class="col-md-6">
     <h3>Categories</h3>
     {% if categories %}
-    <ul>
+    <ul class="list-group mb-3">
       {% for cat in categories %}
-      <li>
+      <li class="list-group-item d-flex justify-content-between align-items-center">
         {{ cat }}
-        <form method="post" action="/watchlist/remove" style="display:inline">
+        <form method="post" action="/watchlist/remove" class="mb-0">
           <input type="hidden" name="category" value="{{ cat }}">
-          <button type="submit" class="outline secondary small">Remove</button>
+          <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
         </form>
       </li>
       {% endfor %}
@@ -51,12 +51,12 @@
     {% endif %}
 
     <form method="post" action="/watchlist/add">
-      <fieldset role="group">
-        <input type="text" name="category" placeholder="e.g. whisky">
-        <button type="submit">Add category</button>
-      </fieldset>
+      <div class="input-group">
+        <input type="text" class="form-control" name="category" placeholder="e.g. whisky">
+        <button type="submit" class="btn btn-primary">Add category</button>
+      </div>
     </form>
-  </section>
+  </div>
 </div>
 
 {% endblock %}

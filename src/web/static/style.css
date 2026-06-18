@@ -1,11 +1,7 @@
-/* BottleBot custom styles — Pico CSS handles the rest */
+/* BottleBot custom styles — Bootstrap 5 handles the rest */
 
-/* Sale window banner */
+/* Sale window banner (on top of Bootstrap's alert-warning) */
 .sale-banner {
-  background: #7c3b00;
-  color: #ffd580;
-  text-align: center;
-  padding: 0.4rem 1rem;
   font-weight: 600;
   font-size: 0.9rem;
 }
@@ -54,19 +50,8 @@ tr.failed-run td {
   color: #e05555;
 }
 
-/* Table overflow wrapper */
-.overflow-auto {
-  overflow-x: auto;
-}
-
 /* Muted hint text */
 .hint {
-  color: var(--pico-muted-color);
+  color: var(--bs-secondary-color);
   font-size: 0.85rem;
-}
-
-/* Small remove buttons in watchlist */
-button.small {
-  padding: 0.15rem 0.5rem;
-  font-size: 0.8rem;
 }
