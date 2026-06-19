@@ -58,3 +58,16 @@ class ScrapeRun(Base):
     products_seen = Column(Integer, default=0)
     prices_inserted = Column(Integer, default=0)
     error_msg = Column(Text)
+
+
+class NotificationLog(Base):
+    __tablename__ = "notification_log"
+    id = Column(Integer, primary_key=True)
+    dispatched_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    channel = Column(String, nullable=False)
+    tag = Column(String, nullable=False)
+    product_name = Column(String)
+    retailer_product_id = Column(Integer)
+    score = Column(Float)
+    price_aud = Column(Float)
+    message_body = Column(Text)

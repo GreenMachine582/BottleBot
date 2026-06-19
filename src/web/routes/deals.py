@@ -42,8 +42,8 @@ def _build_price_chart(history: list) -> str:
     return pio.to_html(fig, include_plotlyjs="cdn", full_html=False, div_id="price-chart")
 
 
-def _get_avg_90d(session: Session, retailer_product_id: int) -> float | None:
-    cutoff = datetime.utcnow() - timedelta(days=90)
+def _get_avg_nd(session: Session, retailer_product_id: int, days: int) -> float | None:
+    cutoff = datetime.utcnow() - timedelta(days=days)
     result = session.query(func.avg(PriceHistory.price_aud)).filter(
         PriceHistory.retailer_product_id == retailer_product_id,
         PriceHistory.scraped_at >= cutoff,
@@ -53,6 +53,7 @@ def _get_avg_90d(session: Session, retailer_product_id: int) -> float | None:
 
 @router.get("/deals/{retailer_product_id}", response_class=HTMLResponse)
 async def deal_detail(request: Request, retailer_product_id: int):
+    criteria = load_criteria()
     with Session(engine) as session:
         rp = session.get(RetailerProduct, retailer_product_id)
         if not rp:
@@ -65,20 +66,25 @@ async def deal_detail(request: Request, retailer_product_id: int):
             .all()
         )
         latest = history[-1] if history else None
-        cross = compare_product_across_retailers(session, rp.product_id)
-        avg_90d = _get_avg_90d(session, retailer_product_id)
+        cross = compare_product_across_retailers(session, rp.product_id, current_rp_id=retailer_product_id)
+        avg_90d = _get_avg_nd(session, retailer_product_id, 90)
+        avg_30d = _get_avg_nd(session, retailer_product_id, 30)
+        all_time_low = session.query(func.min(PriceHistory.price_aud)).filter_by(
+            retailer_product_id=retailer_product_id
+        ).scalar()
+        all_time_high = session.query(func.max(PriceHistory.price_aud)).filter_by(
+            retailer_product_id=retailer_product_id
+        ).scalar()
 
         deal_score = None
         if latest:
             try:
-                criteria = load_criteria()
                 deal_score = ScoringEngine(session, criteria).score_deal(rp, latest)
             except Exception:
                 pass
 
         chart_html = _build_price_chart(history) if len(history) > 1 else None
 
-        # Detach objects from session before returning so templates can access them
         session.expunge_all()
 
     return templates.TemplateResponse(request, "deal.html", {
@@ -90,8 +96,12 @@ async def deal_detail(request: Request, retailer_product_id: int):
         "cross": cross,
         "deal_score": deal_score,
         "avg_90d": avg_90d,
+        "avg_30d": avg_30d,
+        "all_time_low": float(all_time_low) if all_time_low is not None else None,
+        "all_time_high": float(all_time_high) if all_time_high is not None else None,
         "quantities": _DEFAULT_QUANTITIES,
         "selected_qty": 12,
+        "criteria": criteria,
     })
 
 
@@ -107,7 +117,7 @@ async def bulk_calc(request: Request, retailer_product_id: int, qty: int = 12):
             .order_by(PriceHistory.scraped_at.desc())
             .first()
         )
-        avg_90d = _get_avg_90d(session, retailer_product_id)
+        avg_90d = _get_avg_nd(session, retailer_product_id, 90)
         if latest:
             session.expunge(latest)
 

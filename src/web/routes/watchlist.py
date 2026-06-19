@@ -1,7 +1,10 @@
 import yaml
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy.orm import Session
 
+from ...db.engine import engine
+from ...db.models import Product
 from ...scoring.criteria import load_criteria
 from ..templating import templates
 
@@ -16,6 +19,34 @@ async def get_watchlist(request: Request):
     return templates.TemplateResponse(request, "watchlist.html", {
         "products": criteria.watchlist.products,
         "categories": criteria.watchlist.categories,
+    })
+
+
+@router.get("/watchlist/search", response_class=HTMLResponse)
+async def search_watchlist(request: Request, q: str = ""):
+    products: list[Product] = []
+    categories: list[str] = []
+    if q.strip():
+        with Session(engine) as session:
+            products = (
+                session.query(Product)
+                .filter(Product.name.ilike(f"%{q.strip()}%"))
+                .limit(10)
+                .all()
+            )
+            cat_rows = (
+                session.query(Product.category)
+                .filter(Product.category.ilike(f"%{q.strip()}%"))
+                .distinct()
+                .limit(8)
+                .all()
+            )
+            categories = [r[0] for r in cat_rows if r[0]]
+            session.expunge_all()
+    return templates.TemplateResponse(request, "_watchlist_search_results.html", {
+        "products": products,
+        "categories": categories,
+        "q": q.strip(),
     })
 
 

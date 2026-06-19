@@ -24,10 +24,26 @@
     <p class="hint">No products on watchlist.</p>
     {% endif %}
 
-    <form method="post" action="/watchlist/add">
-      <div class="input-group">
-        <input type="text" class="form-control" name="product_name" placeholder="e.g. Johnnie Walker Black" required>
-        <button type="submit" class="btn btn-primary">Add product</button>
+    <div class="position-relative">
+      <input type="text" id="wl-product-search" class="form-control"
+        placeholder="e.g. Johnnie Walker Black" autocomplete="off"
+        name="q"
+        hx-get="/watchlist/search"
+        hx-trigger="keyup changed delay:300ms"
+        hx-target="#wl-product-results"
+        hx-include="this">
+      <div id="wl-product-results" class="watchlist-results position-absolute w-100" style="z-index:10"></div>
+    </div>
+    <form method="post" action="/watchlist/add" id="wl-product-confirm" class="d-none mt-2">
+      <input type="hidden" name="product_name" id="wl-product-confirm-value">
+      <div class="d-flex gap-2 align-items-center">
+        <span id="wl-product-confirm-label" class="text-secondary small flex-grow-1 text-truncate"></span>
+        <button class="btn btn-sm btn-success">Add to watchlist</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="
+          document.getElementById('wl-product-confirm').classList.add('d-none');
+          document.getElementById('wl-product-results').innerHTML='';
+          document.getElementById('wl-product-search').value='';
+        ">Cancel</button>
       </div>
     </form>
   </div>
@@ -50,12 +66,29 @@
     <p class="hint">No categories on watchlist.</p>
     {% endif %}
 
-    <form method="post" action="/watchlist/add">
-      <div class="input-group">
-        <input type="text" class="form-control" name="category" placeholder="e.g. whisky">
-        <button type="submit" class="btn btn-primary">Add category</button>
+    <div class="position-relative">
+      <input type="text" id="wl-category-search" class="form-control"
+        placeholder="e.g. whisky" autocomplete="off"
+        name="q"
+        hx-get="/watchlist/search"
+        hx-trigger="keyup changed delay:300ms"
+        hx-target="#wl-category-results"
+        hx-include="this">
+      <div id="wl-category-results" class="watchlist-results position-absolute w-100" style="z-index:10"></div>
+    </div>
+    <form method="post" action="/watchlist/add" id="wl-category-confirm" class="d-none mt-2">
+      <input type="hidden" name="category" id="wl-category-confirm-value">
+      <div class="d-flex gap-2 align-items-center">
+        <span id="wl-category-confirm-label" class="text-secondary small flex-grow-1 text-truncate"></span>
+        <button class="btn btn-sm btn-success">Add category</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="
+          document.getElementById('wl-category-confirm').classList.add('d-none');
+          document.getElementById('wl-category-results').innerHTML='';
+          document.getElementById('wl-category-search').value='';
+        ">Cancel</button>
       </div>
     </form>
+    <p class="hint mt-2">You can also type a free-form string — it will match any product name containing that text.</p>
   </div>
 </div>
 

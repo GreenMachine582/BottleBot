@@ -1,0 +1,47 @@
+{% if logs %}
+<div class="table-responsive">
+<table class="table table-hover align-middle">
+  <thead>
+    <tr>
+      <th>Dispatched</th>
+      <th>Channel</th>
+      <th>Type</th>
+      <th>Product</th>
+      <th>Score</th>
+      <th>Price</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for lg in logs %}
+    <tr>
+      <td>
+        {% if lg.dispatched_at %}
+        <time data-utc="{{ lg.dispatched_at.isoformat() }}Z">{{ lg.dispatched_at.strftime("%Y-%m-%d %H:%M") }} UTC</time>
+        {% else %}—{% endif %}
+      </td>
+      <td>
+        {% for ch in lg.channel.split("+") %}
+          {% if ch == "discord" %}<span class="badge text-bg-primary">discord</span>
+          {% elif ch == "ntfy" %}<span class="badge text-bg-success">ntfy</span>
+          {% else %}<span class="badge text-bg-secondary">{{ ch }}</span>{% endif %}
+        {% endfor %}
+      </td>
+      <td>
+        {% if lg.tag == "immediate" %}<span class="badge text-bg-danger">immediate</span>
+        {% else %}<span class="badge text-bg-secondary">{{ lg.tag }}</span>{% endif %}
+      </td>
+      <td>
+        {% if lg.retailer_product_id and lg.tag != "digest" %}
+        <a href="/deals/{{ lg.retailer_product_id }}">{{ lg.product_name }}</a>
+        {% else %}{{ lg.product_name or "—" }}{% endif %}
+      </td>
+      <td>{% if lg.score is not none %}{{ lg.score | int }}{% else %}—{% endif %}</td>
+      <td>{% if lg.price_aud is not none %}${{ "%.2f"|format(lg.price_aud) }}{% else %}—{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="hint">No notifications sent yet. Alerts are dispatched when deals score above the immediate threshold.</p>
+{% endif %}

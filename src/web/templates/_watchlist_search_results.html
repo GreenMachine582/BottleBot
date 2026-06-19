@@ -1,0 +1,58 @@
+{% if products or categories %}
+<ul class="list-group list-group-flush" id="wl-results-list">
+  {% for p in products %}
+  <li class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2"
+      role="button" data-type="product" data-value="{{ p.name }}">
+    <div>
+      <span class="fw-semibold">{{ p.name }}</span>
+      {% if p.brand %}<small class="text-secondary ms-1">{{ p.brand }}</small>{% endif %}
+    </div>
+    <div class="d-flex gap-1 align-items-center flex-shrink-0 ms-2">
+      {% if p.category %}<span class="badge text-bg-secondary">{{ p.category }}</span>{% endif %}
+      {% if p.volume_ml %}<small class="text-secondary">{{ p.volume_ml }} mL</small>{% endif %}
+    </div>
+  </li>
+  {% endfor %}
+  {% if categories %}
+  <li class="list-group-item py-1 text-secondary small disabled">Categories</li>
+  {% for cat in categories %}
+  <li class="list-group-item list-group-item-action py-2"
+      role="button" data-type="category" data-value="{{ cat }}">
+    <span class="badge text-bg-info me-1">category</span> {{ cat }}
+  </li>
+  {% endfor %}
+  {% endif %}
+</ul>
+{% elif q %}
+<div class="list-group">
+  <div class="list-group-item text-secondary small py-2">
+    No matching products — will save <em>"{{ q }}"</em> as a substring match.
+  </div>
+</div>
+{% endif %}
+
+<script>
+(function() {
+  var list = document.getElementById("wl-results-list");
+  if (!list) return;
+  list.addEventListener("click", function(e) {
+    var item = e.target.closest("[data-value]");
+    if (!item) return;
+    var val = item.getAttribute("data-value");
+    var type = item.getAttribute("data-type");
+    if (type === "product") {
+      document.getElementById("wl-product-search").value = val;
+      document.getElementById("wl-product-confirm-value").value = val;
+      document.getElementById("wl-product-confirm-label").textContent = val;
+      document.getElementById("wl-product-confirm").classList.remove("d-none");
+      document.getElementById("wl-product-results").innerHTML = "";
+    } else if (type === "category") {
+      document.getElementById("wl-category-search").value = val;
+      document.getElementById("wl-category-confirm-value").value = val;
+      document.getElementById("wl-category-confirm-label").textContent = val;
+      document.getElementById("wl-category-confirm").classList.remove("d-none");
+      document.getElementById("wl-category-results").innerHTML = "";
+    }
+  });
+})();
+</script>

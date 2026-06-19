@@ -9,75 +9,216 @@
   </ol>
 </nav>
 
-<div class="row g-4">
-  <div class="col-md-6">
-    <h2>{{ product.name if product else "Product" }}</h2>
-    <p>
-      {% if latest %}
-        <strong class="fs-4">${{ "%.2f"|format(latest.price_aud) }}</strong>
-        {% if latest.was_price_aud %}&nbsp;<del class="text-secondary">${{ "%.2f"|format(latest.was_price_aud) }}</del>{% endif %}
-      {% endif %}
-      {% if product and product.volume_ml %}&nbsp;· {{ product.volume_ml }} mL{% endif %}
-      {% if deal_score and deal_score.cpl_aud %}&nbsp;· ${{ "%.2f"|format(deal_score.cpl_aud) }}/L{% endif %}
-    </p>
-    {% if latest and latest.promo_label %}<p><mark>{{ latest.promo_label }}</mark></p>{% endif %}
-    {% if rp %}<p><a href="{{ rp.url }}" target="_blank" rel="noopener">View at {{ rp.retailer }} ↗</a></p>{% endif %}
-  </div>
+{# ── Main product card ── #}
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="row g-4">
 
-  {% if deal_score %}
-  <div class="col-md-6">
-    <h3>Score: {{ deal_score.score }}</h3>
-    {% if deal_score.is_new_low %}<p>📉 All-time low price</p>{% endif %}
-    {% if deal_score.is_watchlist %}<p>⭐ On your watchlist</p>{% endif %}
-    <p>Real discount: {{ "%.1f"|format(deal_score.real_discount_pct) }}% vs 90-day average</p>
-    <table class="table table-sm">
-      <thead><tr><th>Component</th><th>Points</th></tr></thead>
-      <tbody>
-        <tr><td>Discount depth</td><td>{{ deal_score.score_breakdown.discount }}</td></tr>
-        <tr><td>Cost per litre</td><td>{{ deal_score.score_breakdown.cpl }}</td></tr>
-        <tr><td>Bulk-buy value</td><td>{{ deal_score.score_breakdown.bulk }}</td></tr>
-        <tr><td>Category preference</td><td>{{ deal_score.score_breakdown.category }}</td></tr>
-        {% if deal_score.score_breakdown.modifiers > 0 %}
-        <tr><td>Bonuses</td><td>+{{ deal_score.score_breakdown.modifiers }}</td></tr>
+      {# Left: image + retailer identity #}
+      <div class="col-md-3 text-center">
+        {% if rp.image_url %}
+        <img src="{{ rp.image_url }}" alt="{{ product.name if product else '' }}"
+             class="img-fluid rounded mb-3" style="max-height:180px;object-fit:contain">
+        {% else %}
+        <div class="d-flex align-items-center justify-content-center bg-secondary rounded mb-3"
+             style="height:120px;opacity:0.3">
+          <span style="font-size:3rem">🍾</span>
+        </div>
         {% endif %}
-      </tbody>
-    </table>
+        <div class="d-flex flex-column gap-1 align-items-center">
+          <span class="badge text-bg-secondary fs-6">{{ rp.retailer | title }}</span>
+          {% if rp.retailer_sku %}
+          <small class="text-secondary">SKU: {{ rp.retailer_sku }}</small>
+          {% endif %}
+          {% if rp %}
+          <a href="{{ rp.url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary mt-1">
+            View at {{ rp.retailer | title }} ↗
+          </a>
+          {% endif %}
+        </div>
+      </div>
+
+      {# Right: product info + score #}
+      <div class="col-md-9">
+        <h2 class="mb-1">{{ product.name if product else "Product" }}</h2>
+
+        {# Attribute pills #}
+        <div class="d-flex flex-wrap gap-1 mb-2">
+          {% if product and product.brand %}
+          <span class="badge text-bg-dark border">{{ product.brand }}</span>
+          {% endif %}
+          {% if product and product.category %}
+          <span class="badge text-bg-dark border">{{ product.category }}</span>
+          {% endif %}
+          {% if product and product.subcategory %}
+          <span class="badge text-bg-dark border">{{ product.subcategory }}</span>
+          {% endif %}
+          {% if product and product.volume_ml %}
+          <span class="badge text-bg-dark border">{{ product.volume_ml }} mL</span>
+          {% endif %}
+          {% if product and product.abv %}
+          <span class="badge text-bg-dark border">{{ product.abv }}% ABV</span>
+          {% endif %}
+        </div>
+
+        {# Pricing display #}
+        <p class="mb-2">
+          {% if latest %}
+            <strong class="fs-3">${{ "%.2f"|format(latest.price_aud) }}</strong>
+            {% if latest.was_price_aud %}&nbsp;<del class="text-secondary fs-5">${{ "%.2f"|format(latest.was_price_aud) }}</del>{% endif %}
+            {% if deal_score and deal_score.cpl_aud %}&nbsp;<span class="text-secondary">· ${{ "%.2f"|format(deal_score.cpl_aud) }}/L</span>{% endif %}
+          {% endif %}
+        </p>
+        {% if latest and latest.promo_label %}<p class="mb-2"><mark>{{ latest.promo_label }}</mark></p>{% endif %}
+
+        {# Score + breakdown #}
+        {% if deal_score %}
+        <div class="border rounded p-3 mt-2">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <span class="h4 mb-0">Score: {{ deal_score.score }}</span>
+            {% if deal_score.is_new_low %}<span class="badge text-bg-warning">📉 All-time low</span>{% endif %}
+            {% if deal_score.is_watchlist %}<span class="badge text-bg-info">⭐ Watchlist</span>{% endif %}
+          </div>
+          <p class="text-secondary small mb-2">{{ "%.1f"|format(deal_score.real_discount_pct) }}% below 90-day average</p>
+          <table class="table table-sm mb-0">
+            <thead><tr><th>Component</th><th>Points</th></tr></thead>
+            <tbody>
+              <tr><td>Discount depth</td><td>{{ deal_score.score_breakdown.discount }}</td></tr>
+              <tr><td>Cost per litre</td><td>{{ deal_score.score_breakdown.cpl }}</td></tr>
+              <tr><td>Bulk-buy value</td><td>{{ deal_score.score_breakdown.bulk }}</td></tr>
+              <tr><td>Category preference</td><td>{{ deal_score.score_breakdown.category }}</td></tr>
+              {% if deal_score.is_watchlist %}
+              <tr class="table-info"><td>⭐ Watchlist bonus</td><td>+{{ criteria.scoring.modifiers.watchlist_bonus | int }}</td></tr>
+              {% endif %}
+              {% if deal_score.is_new_low %}
+              <tr class="table-warning"><td>📉 New low bonus</td><td>+{{ criteria.scoring.modifiers.new_low_bonus | int }}</td></tr>
+              {% endif %}
+              {% if deal_score.score_breakdown.modifiers > 0 and not deal_score.is_watchlist and not deal_score.is_new_low %}
+              <tr><td>Bonuses</td><td>+{{ deal_score.score_breakdown.modifiers }}</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Price metrics strip ── #}
+{% if latest %}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="metric-card">
+      <div class="metric-label">Current</div>
+      <div class="metric-value">${{ "%.2f"|format(latest.price_aud) }}</div>
+      {% if latest.on_sale %}<div class="metric-delta text-success">On sale</div>{% endif %}
+    </div>
+  </div>
+  {% if avg_30d %}
+  <div class="col-6 col-md-3">
+    <div class="metric-card">
+      <div class="metric-label">30-day avg</div>
+      <div class="metric-value">${{ "%.2f"|format(avg_30d) }}</div>
+      {% set d30 = latest.price_aud - avg_30d %}
+      <div class="metric-delta {% if d30 < 0 %}text-success{% elif d30 > 0 %}text-danger{% endif %}">
+        {% if d30 != 0 %}{{ "%+.2f"|format(d30) }}{% else %}—{% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  {% if avg_90d %}
+  <div class="col-6 col-md-3">
+    <div class="metric-card">
+      <div class="metric-label">90-day avg</div>
+      <div class="metric-value">${{ "%.2f"|format(avg_90d) }}</div>
+      {% set d90 = latest.price_aud - avg_90d %}
+      <div class="metric-delta {% if d90 < 0 %}text-success{% elif d90 > 0 %}text-danger{% endif %}">
+        {% if d90 != 0 %}{{ "%+.2f"|format(d90) }}{% else %}—{% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  {% if all_time_low is not none %}
+  <div class="col-6 col-md-3">
+    <div class="metric-card">
+      <div class="metric-label">All-time</div>
+      <div class="metric-value text-success">${{ "%.2f"|format(all_time_low) }}</div>
+      <div class="metric-delta text-secondary">
+        low / {% if all_time_high is not none %}<span class="text-danger">${{ "%.2f"|format(all_time_high) }}</span>{% else %}—{% endif %} high
+      </div>
+    </div>
   </div>
   {% endif %}
 </div>
+{% endif %}
 
+{# ── Price history chart ── #}
 {% if chart_html %}
-<section class="mt-4">
+<section class="mb-4">
   <h3>Price history</h3>
   {{ chart_html | safe }}
 </section>
 {% endif %}
 
+{# ── Cross-retailer comparison ── #}
 {% if cross %}
-<section class="mt-4">
+<section class="mb-4">
   <h3>Across retailers</h3>
   <div class="table-responsive">
   <table class="table table-hover align-middle">
     <thead>
-      <tr><th>Retailer</th><th>Price</th><th></th></tr>
+      <tr>
+        <th>Retailer</th>
+        <th>Price</th>
+        <th>vs Here</th>
+        <th>90d Avg</th>
+        <th>Sale</th>
+        <th>Promo</th>
+        <th></th>
+      </tr>
     </thead>
     <tbody>
     {% for p in cross.prices %}
       <tr {% if p.retailer == cross.best_retailer %}class="best-price"{% endif %}>
-        <td>{{ p.retailer }}{% if p.on_sale %} <span class="badge text-bg-info">🏷 sale</span>{% endif %}</td>
+        <td>
+          {{ p.retailer | title }}
+          {% if p.is_current %}<small class="text-secondary">(this)</small>{% endif %}
+        </td>
         <td>${{ "%.2f"|format(p.price) }}</td>
+        <td>
+          {% if p.delta is not none and not p.is_current %}
+            <span class="{% if p.delta < 0 %}text-success{% elif p.delta > 0 %}text-danger{% endif %}">
+              {{ "%+.2f"|format(p.delta) }}
+            </span>
+          {% else %}—{% endif %}
+        </td>
+        <td>{% if p.avg_90d %}${{ "%.2f"|format(p.avg_90d) }}{% else %}—{% endif %}</td>
+        <td>{% if p.on_sale %}<span class="badge text-bg-info">🏷 sale</span>{% else %}—{% endif %}</td>
+        <td>
+          {% if p.promo_label %}
+          <span class="text-secondary small" title="{{ p.promo_label }}">
+            {{ p.promo_label | truncate(30) }}
+          </span>
+          {% else %}—{% endif %}
+        </td>
         <td><a href="{{ p.url }}" target="_blank" rel="noopener">↗</a></td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
-  <p class="hint">Price spread: {{ cross.spread_pct }}% between cheapest and most expensive.</p>
+  <p class="hint">
+    Best price at <strong>{{ cross.best_retailer | title }}</strong> —
+    saves ${{ "%.2f"|format(cross.worst_price - cross.best_price) }} vs most expensive.
+    Spread: {{ cross.spread_pct }}%.
+  </p>
 </section>
 {% endif %}
 
+{# ── Bulk-buy calculator ── #}
 {% if latest %}
-<section class="mt-4">
+<section class="mb-4">
   <h3>Bulk-buy calculator</h3>
   <label for="qty-slider" class="form-label">
     Quantity: <output id="qty-display">12</output>

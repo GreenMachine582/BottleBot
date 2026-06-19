@@ -2,58 +2,90 @@
 {% block title %}Health{% endblock %}
 {% block content %}
 
-<h2>Scraper health</h2>
-<p>Last 30 scrape runs across all sources.</p>
+<h2>System health</h2>
 
-{% if runs %}
-<div class="table-responsive">
-<table class="table table-hover align-middle">
-  <thead>
-    <tr>
-      <th>Source</th>
-      <th>Started</th>
-      <th>Duration</th>
-      <th>Seen</th>
-      <th>New prices</th>
-      <th>Status</th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for run in runs %}
-    {% set duration = None %}
-    {% if run.started_at and run.finished_at %}
-      {% set duration = (run.finished_at - run.started_at).total_seconds() | int %}
+<ul class="nav nav-tabs mb-4" id="healthTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="tab-runs-btn" data-bs-toggle="tab"
+      data-bs-target="#tab-runs" type="button" role="tab">
+      Scrape runs
+      {% if any_running %}<span class="badge text-bg-warning ms-1">running</span>{% endif %}
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-notifications-btn" data-bs-toggle="tab"
+      data-bs-target="#tab-notifications" type="button" role="tab">
+      Notifications sent
+      {% if logs %}<span class="badge text-bg-secondary ms-1">{{ logs | length }}</span>{% endif %}
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-timeline-btn" data-bs-toggle="tab"
+      data-bs-target="#tab-timeline" type="button" role="tab">
+      System events
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content">
+
+  {# ── Scrape runs tab ── #}
+  <div class="tab-pane fade show active" id="tab-runs" role="tabpanel">
+    <div id="scrape-runs-container"
+      hx-get="/health/runs"
+      hx-trigger="load"
+      hx-swap="innerHTML">
+      {% include "_scrape_runs_table.html" %}
+    </div>
+  </div>
+
+  {# ── Notifications tab ── #}
+  <div class="tab-pane fade" id="tab-notifications" role="tabpanel">
+    {% include "_notification_log_table.html" %}
+  </div>
+
+  {# ── System events timeline tab ── #}
+  <div class="tab-pane fade" id="tab-timeline" role="tabpanel">
+    {% if timeline %}
+    <ul class="timeline mt-2">
+      {% for ev in timeline %}
+      <li class="tl-{{ ev.type }}">
+        <div class="d-flex gap-2 align-items-start">
+          <div class="flex-grow-1">
+            {% if ev.type == "scrape" %}
+              <span class="badge text-bg-secondary me-1">scrape</span>
+              <strong>{{ ev.run.source }}</strong>
+              <span class="ms-1">
+                {% if ev.run.status == "success" %}✅{% elif ev.run.status == "failed" %}❌{% else %}⏳{% endif %}
+                {{ ev.run.status }}
+              </span>
+              {% if ev.run.products_seen is not none %}
+              <small class="text-secondary ms-2">{{ ev.run.products_seen }} seen, {{ ev.run.prices_inserted }} new</small>
+              {% endif %}
+            {% else %}
+              <span class="badge {% if ev.log.tag == 'immediate' %}text-bg-danger{% else %}text-bg-secondary{% endif %} me-1">{{ ev.log.tag }}</span>
+              {% if ev.log.retailer_product_id and ev.log.tag != "digest" %}
+              <a href="/deals/{{ ev.log.retailer_product_id }}">{{ ev.log.product_name }}</a>
+              {% else %}
+              <strong>{{ ev.log.product_name or "—" }}</strong>
+              {% endif %}
+              {% if ev.log.score is not none %}
+              <small class="text-secondary ms-2">score {{ ev.log.score | int }}</small>
+              {% endif %}
+            {% endif %}
+          </div>
+          <small class="text-secondary flex-shrink-0">
+            <time data-utc="{{ ev.ts.isoformat() }}Z">{{ ev.ts.strftime("%m-%d %H:%M") }}</time>
+          </small>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="hint mt-2">No events yet.</p>
     {% endif %}
-    <tr class="{% if run.status == 'failed' %}failed-run{% endif %}">
-      <td>{{ run.source }}</td>
-      <td>
-        {% if run.started_at %}
-        <time data-utc="{{ run.started_at.isoformat() }}Z">{{ run.started_at.strftime("%Y-%m-%d %H:%M") }} UTC</time>
-        {% else %}—{% endif %}
-      </td>
-      <td>{% if duration is not none %}{{ duration }}s{% else %}—{% endif %}</td>
-      <td>{{ run.products_seen if run.products_seen is not none else "—" }}</td>
-      <td>{{ run.prices_inserted if run.prices_inserted is not none else "—" }}</td>
-      <td>
-        {% if run.status == "success" %}<span class="badge text-bg-success">✅ success</span>
-        {% elif run.status == "failed" %}<span class="badge text-bg-danger">❌ failed</span>
-        {% else %}<span class="badge text-bg-secondary">⏳ {{ run.status }}</span>
-        {% endif %}
-        {% if run.error_msg %}
-        <details>
-          <summary>Error</summary>
-          <pre>{{ run.error_msg }}</pre>
-        </details>
-        {% endif %}
-      </td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
+  </div>
+
 </div>
-{% else %}
-<p>No scrape runs recorded yet. Start the scheduler to begin collecting data.</p>
-<pre><code>docker compose up -d</code></pre>
-{% endif %}
 
 {% endblock %}

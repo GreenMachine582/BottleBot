@@ -1,0 +1,19 @@
+{% if deals %}
+{% for deal in deals %}
+<tr class="{% if deal.score >= 85 %}hot{% elif deal.is_watchlist %}watchlist{% endif %}">
+  <td>
+    <strong>{{ deal.score }}</strong>
+    {% if deal.is_new_low %}<span title="All-time low">📉</span>{% endif %}
+    {% if deal.is_watchlist %}<span title="On watchlist">⭐</span>{% endif %}
+  </td>
+  <td><a href="/deals/{{ deal.retailer_product_id }}">{{ deal.product_name }}</a></td>
+  <td>{{ deal.retailer }}</td>
+  <td>${{ "%.2f"|format(deal.current_price) }}</td>
+  <td>{{ "%.0f"|format(deal.real_discount_pct) }}%</td>
+  <td>{% if deal.cpl_aud %}${{ "%.2f"|format(deal.cpl_aud) }}{% else %}—{% endif %}</td>
+  <td>{% if deal.bulk_saving_12 %}<span class="badge text-bg-success">save ${{ "%.0f"|format(deal.bulk_saving_12) }}</span>{% endif %}</td>
+</tr>
+{% endfor %}
+{% else %}
+<tr><td colspan="7" class="text-center text-secondary py-4">No deals match your filters.</td></tr>
+{% endif %}

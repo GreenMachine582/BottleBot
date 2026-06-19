@@ -12,7 +12,50 @@
 </div>
 {% endif %}
 
-<h2>Today's deals <small class="text-secondary">— {{ deals|length }} above score {{ min_score }}</small></h2>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">Today's deals <small class="text-secondary">— {{ deals|length }} above score {{ min_score }}</small></h2>
+</div>
+
+{% if deals or categories or retailers %}
+{# ── Filter bar ── #}
+<form id="filter-form"
+  hx-get="/deals/filter"
+  hx-trigger="change from:#filter-form, keyup changed delay:400ms from:#q-input"
+  hx-target="#deals-tbody"
+  hx-swap="innerHTML"
+  hx-push-url="true"
+  class="row g-2 mb-3">
+  <div class="col-12 col-md-4">
+    <input type="search" id="q-input" name="q" class="form-control form-control-sm"
+      placeholder="Search product…" value="{{ request.query_params.get('q', '') }}" autocomplete="off">
+  </div>
+  <div class="col-6 col-md-3">
+    <select name="category" class="form-select form-select-sm">
+      <option value="">All categories</option>
+      {% for cat in categories %}
+      <option value="{{ cat }}" {% if request.query_params.get('category') == cat %}selected{% endif %}>{{ cat }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-6 col-md-2">
+    <select name="retailer" class="form-select form-select-sm">
+      <option value="">All retailers</option>
+      {% for r in retailers %}
+      <option value="{{ r }}" {% if request.query_params.get('retailer') == r %}selected{% endif %}>{{ r | title }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-12 col-md-3">
+    <div class="d-flex align-items-center gap-2">
+      <label class="form-label mb-0 small text-nowrap">Min score: <output id="score-out">{{ min_score | int }}</output></label>
+      <input type="range" name="min_score" class="form-range"
+        min="0" max="100" step="5"
+        value="{{ request.query_params.get('min_score', min_score) | int }}"
+        oninput="document.getElementById('score-out').value=this.value">
+    </div>
+  </div>
+</form>
+{% endif %}
 
 {% if deals %}
 <div class="table-responsive">
@@ -28,28 +71,27 @@
       <th>Buy 12</th>
     </tr>
   </thead>
-  <tbody>
-  {% for deal in deals %}
-    <tr class="{% if deal.score >= 85 %}hot{% elif deal.is_watchlist %}watchlist{% endif %}">
-      <td>
-        <strong>{{ deal.score }}</strong>
-        {% if deal.is_new_low %}<span title="All-time low">📉</span>{% endif %}
-        {% if deal.is_watchlist %}<span title="On watchlist">⭐</span>{% endif %}
-      </td>
-      <td><a href="/deals/{{ deal.retailer_product_id }}">{{ deal.product_name }}</a></td>
-      <td>{{ deal.retailer }}</td>
-      <td>${{ "%.2f"|format(deal.current_price) }}</td>
-      <td>{{ "%.0f"|format(deal.real_discount_pct) }}%</td>
-      <td>{% if deal.cpl_aud %}${{ "%.2f"|format(deal.cpl_aud) }}{% else %}—{% endif %}</td>
-      <td>{% if deal.bulk_saving_12 %}<span class="badge text-bg-success">save ${{ "%.0f"|format(deal.bulk_saving_12) }}</span>{% endif %}</td>
-    </tr>
-  {% endfor %}
+  <tbody id="deals-tbody">
+    {% include "_deals_table.html" %}
   </tbody>
 </table>
 </div>
 {% else %}
-<p>No deals above score {{ min_score }} right now. Run a scrape to update prices.</p>
-<pre><code>docker exec bottlebot python -m src.cli scrape --source danmurphys</code></pre>
+<p>No deals above score {{ min_score }} right now. Trigger a scrape to update prices:</p>
+<div class="d-flex flex-wrap gap-2 mt-2 mb-3">
+  {% for source in ["danmurphys", "bws", "liquorland", "firstchoice", "cellarmasters", "vintagecellars"] %}
+  <button class="btn btn-sm btn-outline-secondary"
+    hx-post="/scrape/trigger/{{ source }}"
+    hx-swap="none">
+    Scrape {{ source }}
+  </button>
+  {% endfor %}
+  <button class="btn btn-sm btn-primary"
+    hx-post="/scrape/trigger"
+    hx-swap="none">
+    Scrape all
+  </button>
+</div>
 {% endif %}
 
 {% endblock %}

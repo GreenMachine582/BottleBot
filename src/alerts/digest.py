@@ -20,9 +20,24 @@ def send_digest(apobj: apprise.Apprise, deals: list[DealScore], criteria: Criter
             f"   [Buy at {d.retailer.title()}]({d.url}) · [View on BottleBot]({dashboard_url})"
         )
 
+    body = "\n".join(lines)
     apobj.notify(
         title="BottleBot Daily Digest",
-        body="\n".join(lines),
+        body=body,
         body_format=apprise.NotifyFormat.MARKDOWN,
         tag="digest",
     )
+
+    try:
+        from .notify import _log_notification
+        _log_notification(
+            tag="digest",
+            product_name=f"Daily digest ({len(top)} deals)",
+            retailer_product_id=None,
+            score=None,
+            price_aud=None,
+            body=body,
+            channel="discord+ntfy",
+        )
+    except Exception:
+        pass

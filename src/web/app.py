@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from ..calendar import SaleCalendar
-from .routes import criteria, dashboard, deals, health, watchlist
+from .routes import criteria, dashboard, deals, health, scrape, watchlist
 from .templating import templates
 
 _here = Path(__file__).parent
@@ -21,3 +21,4 @@ app.include_router(deals.router)
 app.include_router(watchlist.router)
 app.include_router(criteria.router)
 app.include_router(health.router)
+app.include_router(scrape.router)
