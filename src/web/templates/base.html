@@ -47,16 +47,21 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     // HTMX HX-Trigger toast handler
+    // Value can be a plain string or {message, kind} where kind is "success"|"warning"|"danger"
     document.body.addEventListener("showToast", function(e) {
-      var msg = e.detail.value;
+      var val = e.detail.value;
+      var msg = (typeof val === "object" && val.message) ? val.message : val;
+      var kind = (typeof val === "object" && val.kind) ? val.kind : "success";
+      var colorMap = { success: "text-bg-success", warning: "text-bg-warning", danger: "text-bg-danger" };
+      var cls = colorMap[kind] || "text-bg-success";
       var el = document.createElement("div");
-      el.className = "toast align-items-center text-bg-success border-0";
+      el.className = "toast align-items-center " + cls + " border-0";
       el.setAttribute("role", "alert");
       el.setAttribute("aria-live", "assertive");
       el.innerHTML = '<div class="d-flex"><div class="toast-body">' + msg
         + '</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button></div>';
       document.getElementById("toast-container").appendChild(el);
-      new bootstrap.Toast(el, { delay: 4000 }).show();
+      new bootstrap.Toast(el, { delay: 5000 }).show();
     });
   </script>
   <script>

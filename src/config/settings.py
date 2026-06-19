@@ -15,3 +15,6 @@ class Settings(BaseSettings):
 
     # BWS internal API subscription key (Phase 3) — see src/scrapers/bws.py
     bws_subscription_key: str = ""
+
+    # Minimum minutes between manual scrape triggers for the same source (0 = no cooldown)
+    scrape_cooldown_minutes: int = 5
