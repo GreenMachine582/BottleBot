@@ -2,9 +2,9 @@
 <ul class="list-group list-group-flush" id="wl-results-list">
   {% for p in products %}
   <li class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2"
-      role="button" data-type="product" data-value="{{ p.name }}">
+      role="button" data-type="product" data-value="{{ clean_name(p.name) }}">
     <div>
-      <span class="fw-semibold">{{ p.name }}</span>
+      <span class="fw-semibold">{{ clean_name(p.name) }}</span>
       {% if p.brand %}<small class="text-secondary ms-1">{{ p.brand }}</small>{% endif %}
     </div>
     <div class="d-flex gap-1 align-items-center flex-shrink-0 ms-2">

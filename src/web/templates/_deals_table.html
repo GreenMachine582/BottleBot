@@ -6,7 +6,13 @@
     {% if deal.is_new_low %}<span title="All-time low">📉</span>{% endif %}
     {% if deal.is_watchlist %}<span title="On watchlist">⭐</span>{% endif %}
   </td>
-  <td><a href="/deals/{{ deal.retailer_product_id }}">{{ deal.product_name }}</a></td>
+  <td>
+    <a href="/deals/{{ deal.retailer_product_id }}">{{ clean_name(deal.product_name) }}</a>
+    <div class="d-inline-flex gap-1 ms-1 align-items-center">
+      {% if deal.category %}<span class="badge text-bg-dark border" style="font-size:0.65rem">{{ deal.category }}</span>{% endif %}
+      {% if deal.volume_ml %}<span class="badge text-bg-dark border" style="font-size:0.65rem">{{ deal.volume_ml }}mL</span>{% endif %}
+    </div>
+  </td>
   <td>{{ deal.retailer }}</td>
   <td>${{ "%.2f"|format(deal.current_price) }}</td>
   <td>{{ "%.0f"|format(deal.real_discount_pct) }}%</td>

@@ -46,7 +46,12 @@ async def filter_deals(
 
     if q:
         q_lower = q.lower()
-        deals = [d for d in deals if q_lower in d.product_name.lower()]
+        deals = [
+            d for d in deals
+            if q_lower in d.product_name.lower()
+            or (d.category and q_lower in d.category.lower())
+            or (d.volume_ml and q_lower in str(d.volume_ml))
+        ]
     if category:
         deals = [d for d in deals if d.category == category]
     if retailer:
