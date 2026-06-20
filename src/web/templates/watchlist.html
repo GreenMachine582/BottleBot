@@ -11,7 +11,7 @@
 
 <form id="watchlist-filter-form"
   hx-get="/watchlist/list"
-  hx-trigger="change from:#watchlist-filter-form, keyup changed delay:400ms from:#wl-q-input"
+  hx-trigger="change from:#watchlist-filter-form, keyup changed delay:400ms from:#wl-q-input, submit"
   hx-target="#watchlist-list-body"
   hx-swap="innerHTML"
   hx-push-url="true"
