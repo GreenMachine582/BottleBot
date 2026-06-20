@@ -72,7 +72,7 @@ class ScoringEngine:
         c = self.criteria.watchlist
         if any(w.lower() in product_name.lower() for w in c.products):
             return True
-        if category and category in c.categories:
+        if category and category.lower() in {x.lower() for x in c.categories}:
             return True
         return False
 

@@ -46,3 +46,26 @@ CATEGORY_MAP: dict[str, str] = {
 
 def normalise_category(raw: str) -> str:
     return CATEGORY_MAP.get(raw.lower().strip(), raw.lower().replace(" ", "_"))
+
+
+# Fixed, known set of canonical category slugs — used to render category
+# filters/tags without depending on what's currently in stock.
+CATEGORIES: list[str] = sorted(set(CATEGORY_MAP.values()))
+
+CATEGORY_LABELS: dict[str, str] = {
+    "whisky": "Whisky",
+    "wine_red": "Red Wine",
+    "wine_white": "White Wine",
+    "wine_sparkling": "Sparkling Wine",
+    "wine_rose": "Rosé",
+    "wine_fortified": "Fortified Wine",
+    "beer": "Beer",
+    "cider": "Cider",
+    "gin": "Gin",
+    "vodka": "Vodka",
+    "rum": "Rum",
+    "tequila": "Tequila",
+    "brandy": "Brandy",
+    "liqueur": "Liqueur",
+    "rtd": "RTD",
+}

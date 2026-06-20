@@ -56,16 +56,9 @@ tr.failed-run td {
   font-size: 0.85rem;
 }
 
-/* Watchlist search dropdown */
-.watchlist-results {
-  max-height: 280px;
-  overflow-y: auto;
-  border: 1px solid var(--bs-border-color);
-  border-radius: 0.375rem;
-  background: var(--bs-body-bg);
-}
-.watchlist-results:empty {
-  display: none;
+/* Watchlist: category pill / volume chip toggle buttons */
+.watchlist-pill, .watchlist-chip {
+  transition: background-color 0.15s ease;
 }
 
 /* Metric stat cards on deal detail */

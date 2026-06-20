@@ -2,94 +2,43 @@
 {% block title %}Watchlist{% endblock %}
 {% block content %}
 
-<h2>Watchlist</h2>
-<p>Items on the watchlist get a score bonus and trigger immediate alerts at any positive deal score.</p>
+<div class="mb-3">
+  <h2 class="mb-1">Watchlist</h2>
+  <p class="hint mb-0">Watched products and categories get a score bonus and trigger immediate alerts at any positive deal score.</p>
+</div>
 
-<div class="row g-4">
-  <div class="col-md-6">
-    <h3>Products</h3>
-    {% if products %}
-    <ul class="list-group mb-3">
-      {% for name in products %}
-      <li class="list-group-item d-flex justify-content-between align-items-center">
-        {{ name }}
-        <form method="post" action="/watchlist/remove" class="mb-0">
-          <input type="hidden" name="product_name" value="{{ name }}">
-          <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
-        </form>
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}
-    <p class="hint">No products on watchlist.</p>
-    {% endif %}
+{% include "_watchlist_category_pills.html" %}
 
-    <div class="position-relative">
-      <input type="text" id="wl-product-search" class="form-control"
-        placeholder="e.g. Johnnie Walker Black" autocomplete="off"
-        name="q"
-        hx-get="/watchlist/search"
-        hx-trigger="keyup changed delay:300ms"
-        hx-target="#wl-product-results"
-        hx-include="this">
-      <div id="wl-product-results" class="watchlist-results position-absolute w-100" style="z-index:10"></div>
-    </div>
-    <form method="post" action="/watchlist/add" id="wl-product-confirm" class="d-none mt-2">
-      <input type="hidden" name="product_name" id="wl-product-confirm-value">
-      <div class="d-flex gap-2 align-items-center">
-        <span id="wl-product-confirm-label" class="text-secondary small flex-grow-1 text-truncate"></span>
-        <button class="btn btn-sm btn-success">Add to watchlist</button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="
-          document.getElementById('wl-product-confirm').classList.add('d-none');
-          document.getElementById('wl-product-results').innerHTML='';
-          document.getElementById('wl-product-search').value='';
-        ">Cancel</button>
-      </div>
-    </form>
+<form id="watchlist-filter-form"
+  hx-get="/watchlist/list"
+  hx-trigger="change from:#watchlist-filter-form, keyup changed delay:400ms from:#wl-q-input"
+  hx-target="#watchlist-list-body"
+  hx-swap="innerHTML"
+  hx-push-url="true"
+  class="row g-2 mb-3">
+  <div class="col-12 col-md-5">
+    <input type="search" id="wl-q-input" name="q" class="form-control form-control-sm"
+      placeholder="Search product…" value="{{ request.query_params.get('q', '') }}" autocomplete="off">
   </div>
-
-  <div class="col-md-6">
-    <h3>Categories</h3>
-    {% if categories %}
-    <ul class="list-group mb-3">
+  <div class="col-6 col-md-4">
+    <select name="category" class="form-select form-select-sm">
+      <option value="">All categories</option>
       {% for cat in categories %}
-      <li class="list-group-item d-flex justify-content-between align-items-center">
-        {{ cat }}
-        <form method="post" action="/watchlist/remove" class="mb-0">
-          <input type="hidden" name="category" value="{{ cat }}">
-          <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
-        </form>
-      </li>
+      <option value="{{ cat }}" {% if request.query_params.get('category') == cat %}selected{% endif %}>{{ category_labels.get(cat, cat) }}</option>
       {% endfor %}
-    </ul>
-    {% else %}
-    <p class="hint">No categories on watchlist.</p>
-    {% endif %}
-
-    <div class="position-relative">
-      <input type="text" id="wl-category-search" class="form-control"
-        placeholder="e.g. whisky" autocomplete="off"
-        name="q"
-        hx-get="/watchlist/search"
-        hx-trigger="keyup changed delay:300ms"
-        hx-target="#wl-category-results"
-        hx-include="this">
-      <div id="wl-category-results" class="watchlist-results position-absolute w-100" style="z-index:10"></div>
-    </div>
-    <form method="post" action="/watchlist/add" id="wl-category-confirm" class="d-none mt-2">
-      <input type="hidden" name="category" id="wl-category-confirm-value">
-      <div class="d-flex gap-2 align-items-center">
-        <span id="wl-category-confirm-label" class="text-secondary small flex-grow-1 text-truncate"></span>
-        <button class="btn btn-sm btn-success">Add category</button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="
-          document.getElementById('wl-category-confirm').classList.add('d-none');
-          document.getElementById('wl-category-results').innerHTML='';
-          document.getElementById('wl-category-search').value='';
-        ">Cancel</button>
-      </div>
-    </form>
-    <p class="hint mt-2">You can also type a free-form string — it will match any product name containing that text.</p>
+    </select>
   </div>
+  <div class="col-6 col-md-3 d-flex align-items-center">
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" name="watchlist_only" value="true" id="wl-only-check"
+        {% if request.query_params.get('watchlist_only') %}checked{% endif %}>
+      <label class="form-check-label small" for="wl-only-check">Watchlist only</label>
+    </div>
+  </div>
+</form>
+
+<div id="watchlist-list-body">
+  {% include "_watchlist_list.html" %}
 </div>
 
 {% endblock %}

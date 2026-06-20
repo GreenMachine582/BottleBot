@@ -4,13 +4,15 @@ Each route is exercised against a real in-memory SQLite database so we
 confirm templates render without errors and all routes respond correctly.
 The engine in each route module is patched to point at the temp DB.
 """
+import re
+
 import yaml
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from src.db.models import Base, ScrapeRun
+from src.db.models import Base, Product, ScrapeRun
 from src.web.app import app
 
 
@@ -64,12 +66,13 @@ def client(tmp_path_factory):
     import src.web.routes.watchlist as watchlist_mod
     import src.web.routes.criteria as criteria_mod
 
-    for mod in [dash_mod, deals_mod, health_mod]:
+    for mod in [dash_mod, deals_mod, health_mod, watchlist_mod]:
         mod.engine = test_engine
     watchlist_mod.CRITERIA_PATH = criteria_path
     criteria_mod.CRITERIA_PATH = criteria_path
 
-    # Seed a ScrapeRun so the health page has something to show
+    # Seed a ScrapeRun so the health page has something to show, plus a
+    # multi-volume product so the watchlist page has something to toggle.
     from datetime import datetime, timedelta
     with Session(test_engine) as session:
         session.add(ScrapeRun(
@@ -80,6 +83,10 @@ def client(tmp_path_factory):
             products_seen=42,
             prices_inserted=7,
         ))
+        session.add_all([
+            Product(name="Penfolds Bin 389 750mL", brand="Penfolds", category="wine_red", volume_ml=750),
+            Product(name="Penfolds Bin 389 1L", brand="Penfolds", category="wine_red", volume_ml=1000),
+        ])
         session.commit()
 
     yield TestClient(app)
@@ -107,16 +114,53 @@ def test_watchlist_loads(client):
     resp = client.get("/watchlist")
     assert resp.status_code == 200
     assert "Watchlist" in resp.text
+    assert "Penfolds Bin 389" in resp.text
 
 
-def test_watchlist_add_and_remove(client):
-    resp = client.post("/watchlist/add", data={"product_name": "Penfolds Bin 389"}, follow_redirects=True)
+def test_watchlist_toggle_category(client):
+    resp = client.post("/watchlist/toggle-category", data={"category": "whisky"})
+    assert resp.status_code == 200
+    assert "btn-success" in resp.text
+
+    resp = client.post("/watchlist/toggle-category", data={"category": "whisky"})
+    assert resp.status_code == 200
+    assert "btn-success" not in resp.text
+
+
+def test_watchlist_toggle_category_rejects_unknown_category(client):
+    resp = client.post("/watchlist/toggle-category", data={"category": "not-a-real-category"})
+    assert resp.status_code == 404
+
+
+def test_watchlist_toggle_volume(client):
+    resp = client.get("/watchlist")
+    assert resp.status_code == 200
+    match = re.search(r'"product_id":\s*(\d+)', resp.text)
+    assert match, "expected at least one volume chip with a product_id"
+    product_id = int(match.group(1))
+
+    resp = client.post("/watchlist/toggle-volume", data={"product_id": product_id})
+    assert resp.status_code == 200
+    assert "btn-success" in resp.text
+
+    resp = client.post("/watchlist/toggle-volume", data={"product_id": product_id})
+    assert resp.status_code == 200
+    assert "btn-success" not in resp.text
+
+
+def test_watchlist_toggle_volume_unknown_id_returns_404(client):
+    resp = client.post("/watchlist/toggle-volume", data={"product_id": 999999})
+    assert resp.status_code == 404
+
+
+def test_watchlist_list_filters_by_query(client):
+    resp = client.get("/watchlist/list", params={"q": "Penfolds"})
     assert resp.status_code == 200
     assert "Penfolds Bin 389" in resp.text
 
-    resp = client.post("/watchlist/remove", data={"product_name": "Penfolds Bin 389"}, follow_redirects=True)
+    resp = client.get("/watchlist/list", params={"q": "Nonexistent Product XYZ"})
     assert resp.status_code == 200
-    assert "Penfolds Bin 389" not in resp.text
+    assert "No products match" in resp.text
 
 
 def test_criteria_loads(client):

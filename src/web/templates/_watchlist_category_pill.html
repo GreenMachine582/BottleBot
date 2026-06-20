@@ -1,0 +1,8 @@
+<button type="button"
+  class="btn btn-sm {{ 'btn-success' if watching else 'btn-outline-secondary' }} watchlist-pill"
+  hx-post="/watchlist/toggle-category"
+  hx-vals='{"category": "{{ cat }}"}'
+  hx-target="this"
+  hx-swap="outerHTML">
+  {{ label }}
+</button>

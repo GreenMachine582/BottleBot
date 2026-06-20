@@ -1,0 +1,7 @@
+{% if groups %}
+{% for group in groups %}
+{% include "_watchlist_product_card.html" %}
+{% endfor %}
+{% else %}
+<div class="text-center text-secondary py-4">No products match your filters.</div>
+{% endif %}

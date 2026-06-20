@@ -49,7 +49,7 @@
     // HTMX HX-Trigger toast handler
     // Value can be a plain string or {message, kind} where kind is "success"|"warning"|"danger"
     document.body.addEventListener("showToast", function(e) {
-      var val = e.detail.value;
+      var val = e.detail;
       var msg = (typeof val === "object" && val.message) ? val.message : val;
       var kind = (typeof val === "object" && val.kind) ? val.kind : "success";
       var colorMap = { success: "text-bg-success", warning: "text-bg-warning", danger: "text-bg-danger" };
