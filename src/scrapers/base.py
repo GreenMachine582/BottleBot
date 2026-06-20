@@ -19,6 +19,7 @@ class ScrapedProduct:
     on_sale: bool
     promo_label: str | None
     image_url: str | None
+    subcategory: str | None = None
 
 
 class BaseScraper(ABC):
@@ -28,6 +29,16 @@ class BaseScraper(ABC):
     def scrape_deals(self) -> Iterator[ScrapedProduct]:
         """Yield products currently on deal / in the deals section."""
         ...
+
+    def enrich(self, scraped: ScrapedProduct) -> ScrapedProduct:
+        """Optional: fetch additional fields (e.g. brand/category) not
+        available on the listing page, typically via an extra page load.
+
+        Default no-op — override per scraper. db/writer.upsert_product only
+        calls this for brand-new products, so it's a one-time cost per
+        product rather than a per-scrape cost.
+        """
+        return scraped
 
     def scrape_category(self, category: str) -> Iterator[ScrapedProduct]:
         """Yield all products in a given category (for baseline price tracking).

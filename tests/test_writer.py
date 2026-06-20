@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -70,6 +72,25 @@ def test_same_bottle_from_different_retailer_links_to_existing_product(session):
     session.commit()
 
     assert rp1.product_id == rp2.product_id
+
+
+def test_enrich_fn_called_only_when_creating_new_product(session):
+    calls = []
+
+    def fake_enrich(scraped):
+        calls.append(scraped.url)
+        return replace(scraped, brand="Enriched Brand", category="whisky", subcategory="Single Malt")
+
+    rp, _ = upsert_product(session, make_product(), enrich_fn=fake_enrich)
+    session.commit()
+    assert calls == ["https://example.com/p/123"]
+    assert rp.product.brand == "Enriched Brand"
+    assert rp.product.subcategory == "Single Malt"
+
+    # Same product again (same retailer+url) — already exists, no re-enrichment.
+    upsert_product(session, make_product(price_aud=45.0), enrich_fn=fake_enrich)
+    session.commit()
+    assert calls == ["https://example.com/p/123"]
 
 
 def test_different_volume_creates_separate_product(session):

@@ -37,7 +37,7 @@ def run_scraper(scraper_cls, source_name: str):
             seen = inserted = 0
             for product in scraper.scrape_deals():
                 seen += 1
-                _, changed = upsert_product(session, product)
+                _, changed = upsert_product(session, product, enrich_fn=scraper.enrich)
                 if changed:
                     inserted += 1
             session.commit()

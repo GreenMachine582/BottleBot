@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -7,10 +8,18 @@ from .matching import find_matching_product
 from .models import PriceHistory, Product, RetailerProduct
 
 
-def upsert_product(session: Session, scraped: ScrapedProduct) -> tuple[RetailerProduct, bool]:
+def upsert_product(
+    session: Session,
+    scraped: ScrapedProduct,
+    enrich_fn: Callable[[ScrapedProduct], ScrapedProduct] | None = None,
+) -> tuple[RetailerProduct, bool]:
     """
     Find or create RetailerProduct. Returns (retailer_product, price_changed).
     Only inserts a new PriceHistory row if the price has actually changed.
+
+    `enrich_fn` (typically a scraper's `.enrich()`) is called only when a
+    brand-new Product row is about to be created — a one-time cost per
+    product rather than a per-scrape cost for products we already know.
     """
     rp = session.query(RetailerProduct).filter_by(
         retailer=scraped.retailer,
@@ -22,10 +31,13 @@ def upsert_product(session: Session, scraped: ScrapedProduct) -> tuple[RetailerP
             session, scraped.name, scraped.brand, scraped.volume_ml
         )
         if not product:
+            if enrich_fn:
+                scraped = enrich_fn(scraped)
             product = Product(
                 name=scraped.name,
                 brand=scraped.brand,
                 category=scraped.category,
+                subcategory=scraped.subcategory,
                 volume_ml=scraped.volume_ml,
                 abv=scraped.abv,
             )

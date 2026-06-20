@@ -1,12 +1,15 @@
+import json
 import logging
 import os
 import re
 from collections.abc import Iterator
+from dataclasses import replace
 
 from playwright.sync_api import Browser, Page, sync_playwright
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .base import BaseScraper, ScrapedProduct
+from .taxonomy import normalise_category
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +69,10 @@ SEL_PRICE_CONTAINER = ".price-container"
 SEL_PRICE_VALUE = "[itemprop='price'] .value"
 SEL_PROMO_PRICE = ".promo-price"
 
+# Product detail page (PDP) — used only by enrich(), not the listing scrape.
+SEL_JSON_LD = "script[type='application/ld+json']"
+SEL_BREADCRUMB_LINKS = "#pdp-breadcrumbs .breadcrumbs__crumb a"
+
 
 def _parse_price(text: str | None) -> float | None:
     if not text:
@@ -77,6 +84,28 @@ def _parse_price(text: str | None) -> float | None:
 def _volume_to_ml(num: str, unit: str) -> int:
     val = float(num)
     return int(val * 1000) if unit.lower() == "l" else int(val)
+
+
+def _parse_ld_brand(ld_json_text: str | None) -> str | None:
+    """Extract `brand.name` from a schema.org/Product JSON-LD blob."""
+    if not ld_json_text:
+        return None
+    try:
+        data = json.loads(ld_json_text)
+    except (ValueError, TypeError):
+        return None
+    brand = data.get("brand")
+    return brand.get("name") if isinstance(brand, dict) else None
+
+
+def _parse_breadcrumb_category(crumb_texts: list[str]) -> tuple[str | None, str | None]:
+    """First breadcrumb link is the category, second (if present) is the
+    subcategory — the last crumb is always the product name itself (not a
+    link) and isn't passed in here."""
+    crumbs = [c.strip() for c in crumb_texts if c.strip()]
+    category = normalise_category(crumbs[0]) if crumbs else None
+    subcategory = crumbs[1] if len(crumbs) > 1 else None
+    return category, subcategory
 
 
 class DanMurphysScraper(BaseScraper):
@@ -204,10 +233,10 @@ class DanMurphysScraper(BaseScraper):
                 retailer_sku=retailer_sku,
                 url=url,
                 name=name,
-                brand=None,  # Phase 3: extract from name or API
-                category=None,  # Phase 3: map from URL path
+                brand=None,  # not on the deals card — see enrich()
+                category=None,  # not on the deals card — see enrich()
                 volume_ml=volume_ml,
-                abv=None,
+                abv=None,  # not present anywhere on danmurphys.com.au
                 price_aud=price_aud,
                 was_price_aud=was_price_aud,
                 in_stock=True,
@@ -217,6 +246,38 @@ class DanMurphysScraper(BaseScraper):
             )
         except Exception:
             return None
+
+    def enrich(self, scraped: ScrapedProduct) -> ScrapedProduct:
+        """Visit the product's own detail page for brand/category/subcategory.
+        Best-effort — a failed enrichment just returns the product unchanged
+        rather than failing the whole scrape run."""
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(
+                    headless=True, args=["--disable-blink-features=AutomationControlled"]
+                )
+                page = self._new_page(browser)
+                self._goto(page, scraped.url)
+
+                ld_el = page.query_selector(SEL_JSON_LD)
+                brand = _parse_ld_brand(ld_el.inner_text() if ld_el else None)
+
+                crumb_els = page.query_selector_all(SEL_BREADCRUMB_LINKS)
+                category, subcategory = _parse_breadcrumb_category(
+                    [c.inner_text() for c in crumb_els]
+                )
+
+                browser.close()
+        except Exception:
+            log.warning("danmurphys: enrichment failed for %s", scraped.url, exc_info=True)
+            return scraped
+
+        return replace(
+            scraped,
+            brand=brand or scraped.brand,
+            category=category or scraped.category,
+            subcategory=subcategory,
+        )
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     def _goto(self, page: Page, url: str):
