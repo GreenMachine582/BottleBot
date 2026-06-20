@@ -1,4 +1,5 @@
 import json
+from urllib.parse import urlencode
 
 import yaml
 from fastapi import APIRouter, Form, Request
@@ -22,11 +23,37 @@ from ..watchlist_logic import (
 router = APIRouter()
 
 CRITERIA_PATH = "config/criteria.yaml"
+WATCHLIST_PAGE_SIZE = 20
 
 
 def _toast(message: str, kind: str = "success") -> str:
     """Build an HX-Trigger header value for a toast notification."""
     return json.dumps({"showToast": {"message": message, "kind": kind}})
+
+
+def _paginate(
+    groups: list[ProductGroup],
+    offset: int,
+    q: str,
+    category: str,
+    watchlist_only: bool,
+) -> dict:
+    """Slices `groups` to one page and builds the "load more" URL for the
+    next page (carrying the current filters), or None if this was the last."""
+    total = len(groups)
+    page = groups[offset: offset + WATCHLIST_PAGE_SIZE]
+    next_offset = offset + WATCHLIST_PAGE_SIZE
+    next_url = None
+    if next_offset < total:
+        params = {"offset": next_offset}
+        if q:
+            params["q"] = q
+        if category:
+            params["category"] = category
+        if watchlist_only:
+            params["watchlist_only"] = "true"
+        next_url = "/watchlist/list?" + urlencode(params)
+    return {"groups": page, "next_url": next_url}
 
 
 def _load_yaml() -> dict:
@@ -51,8 +78,8 @@ async def get_watchlist(request: Request):
         "categories": CATEGORIES,
         "category_labels": CATEGORY_LABELS,
         "watched_categories": {c.lower() for c in criteria.watchlist.categories},
-        "groups": groups,
         "watch_products": criteria.watchlist.products,
+        **_paginate(groups, 0, "", "", False),
     })
 
 
@@ -62,6 +89,7 @@ async def filter_watchlist_list(
     q: str = "",
     category: str = "",
     watchlist_only: bool = False,
+    offset: int = 0,
 ):
     criteria = load_criteria(CRITERIA_PATH)
     watch_products = criteria.watchlist.products
@@ -81,13 +109,13 @@ async def filter_watchlist_list(
         for g in groups:
             watched_vols = [v for v in g.volumes if is_volume_watched(v, watch_products)]
             if watched_vols:
-                narrowed.append(ProductGroup(g.clean_name, g.brand, g.category, watched_vols))
+                narrowed.append(ProductGroup(g.clean_name, g.brand, g.category, g.subcategory, watched_vols))
         groups = narrowed
 
     return templates.TemplateResponse(request, "_watchlist_list.html", {
-        "groups": groups,
         "watch_products": watch_products,
         "category_labels": CATEGORY_LABELS,
+        **_paginate(groups, offset, q, category, watchlist_only),
     })
 
 
@@ -149,6 +177,7 @@ async def toggle_volume(request: Request, product_id: int = Form(...)):
     resp = templates.TemplateResponse(request, "_watchlist_volume_chip.html", {
         "product": product,
         "watching": now_on,
+        "siblings": siblings,
     })
     resp.headers["HX-Trigger"] = _toast(
         f"{product.volume_ml}mL {'added to' if now_on else 'removed from'} watchlist"

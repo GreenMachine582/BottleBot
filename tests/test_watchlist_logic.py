@@ -4,7 +4,10 @@ from sqlalchemy.orm import Session
 
 from src.db.models import Base, Product
 from src.web.watchlist_logic import (
+    ProductGroup,
+    chip_abv_tooltip,
     find_siblings,
+    group_name_tooltip,
     group_products,
     is_volume_watched,
     toggle_volume_off,
@@ -20,8 +23,8 @@ def session():
         yield s
 
 
-def make_product(session, name, brand="Penfolds", category="wine_red", volume_ml=750):
-    p = Product(name=name, brand=brand, category=category, volume_ml=volume_ml)
+def make_product(session, name, brand="Penfolds", category="wine_red", volume_ml=750, subcategory=None, abv=None):
+    p = Product(name=name, brand=brand, category=category, volume_ml=volume_ml, subcategory=subcategory, abv=abv)
     session.add(p)
     session.flush()
     return p
@@ -86,3 +89,46 @@ def test_find_siblings_matches_by_clean_name_and_brand(session):
     ids = {s.id for s in siblings}
     assert ids == {p1.id, p2.id}
     assert other.id not in ids
+
+
+CATEGORY_LABELS = {"wine_red": "Red Wine", "whisky": "Whisky"}
+
+
+def test_group_name_tooltip_composes_category_subcategory_and_uniform_abv(session):
+    p1 = make_product(session, "Penfolds Bin 389 750mL", subcategory="Cabernet Shiraz", abv=14.5)
+    p2 = make_product(session, "Penfolds Bin 389 1L", volume_ml=1000, subcategory="Cabernet Shiraz", abv=14.5)
+    session.commit()
+
+    group = group_products([p1, p2])[0]
+    assert group_name_tooltip(group, CATEGORY_LABELS) == "Red Wine · Cabernet Shiraz · 14.5% ABV"
+
+
+def test_group_name_tooltip_omits_abv_when_it_varies(session):
+    p1 = make_product(session, "Jameson 700mL", brand="Jameson", category="whisky", volume_ml=700, abv=40.0)
+    p2 = make_product(session, "Jameson 1L", brand="Jameson", category="whisky", volume_ml=1000, abv=37.5)
+    session.commit()
+
+    group = group_products([p1, p2])[0]
+    assert group_name_tooltip(group, CATEGORY_LABELS) == "Whisky"
+
+
+def test_group_name_tooltip_empty_when_nothing_known():
+    group = ProductGroup(clean_name="Mystery Bottle", brand=None, category=None, subcategory=None, volumes=[])
+    assert group_name_tooltip(group, CATEGORY_LABELS) == ""
+
+
+def test_chip_abv_tooltip_empty_when_uniform_across_siblings(session):
+    p1 = make_product(session, "Jameson 700mL", brand="Jameson", category="whisky", volume_ml=700, abv=40.0)
+    p2 = make_product(session, "Jameson 1L", brand="Jameson", category="whisky", volume_ml=1000, abv=40.0)
+    session.commit()
+
+    assert chip_abv_tooltip(p1, siblings=[p1, p2]) == ""
+
+
+def test_chip_abv_tooltip_populated_when_siblings_disagree(session):
+    p1 = make_product(session, "Jameson 700mL", brand="Jameson", category="whisky", volume_ml=700, abv=40.0)
+    p2 = make_product(session, "Jameson 1L", brand="Jameson", category="whisky", volume_ml=1000, abv=37.5)
+    session.commit()
+
+    assert chip_abv_tooltip(p1, siblings=[p1, p2]) == "40% ABV"
+    assert chip_abv_tooltip(p2, siblings=[p1, p2]) == "37.5% ABV"

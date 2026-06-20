@@ -16,6 +16,7 @@ class ProductGroup:
     clean_name: str
     brand: str | None
     category: str | None
+    subcategory: str | None
     volumes: list[Product]
 
 
@@ -39,9 +40,35 @@ def group_products(products: list[Product]) -> list[ProductGroup]:
             clean_name=clean_name,
             brand=brand,
             category=volumes[0].category,
+            subcategory=volumes[0].subcategory,
             volumes=volumes,
         ))
     return result
+
+
+def group_name_tooltip(group: ProductGroup, category_labels: dict[str, str]) -> str:
+    """Hover text for a product's name: category, subcategory, and ABV —
+    but ABV is only included here when every volume in the group shares the
+    same value. If it varies, it's shown per-chip instead (chip_abv_tooltip)."""
+    parts = []
+    if group.category:
+        parts.append(category_labels.get(group.category, group.category))
+    if group.subcategory:
+        parts.append(group.subcategory)
+    abv_values = {v.abv for v in group.volumes if v.abv is not None}
+    if len(abv_values) == 1:
+        parts.append(f"{next(iter(abv_values)):g}% ABV")
+    return " · ".join(parts)
+
+
+def chip_abv_tooltip(product: Product, siblings: list[Product]) -> str:
+    """Hover text for one volume chip's own ABV — only populated when this
+    product's volumes actually disagree on ABV (otherwise the single shared
+    value already appears in group_name_tooltip)."""
+    abv_values = {p.abv for p in siblings if p.abv is not None}
+    if len(abv_values) > 1 and product.abv is not None:
+        return f"{product.abv:g}% ABV"
+    return ""
 
 
 def find_siblings(session: Session, product: Product) -> list[Product]:

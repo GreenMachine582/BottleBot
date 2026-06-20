@@ -61,6 +61,13 @@ tr.failed-run td {
   transition: background-color 0.15s ease;
 }
 
+/* Watchlist: scrollable continuous list container */
+.watchlist-list-container {
+  max-height: 65vh;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
 /* Metric stat cards on deal detail */
 .metric-card {
   background: var(--bs-tertiary-bg);

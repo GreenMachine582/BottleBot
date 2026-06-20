@@ -163,6 +163,39 @@ def test_watchlist_list_filters_by_query(client):
     assert "No products match" in resp.text
 
 
+def test_watchlist_list_paginates(client, monkeypatch, tmp_path):
+    """Self-contained: swaps in its own tiny engine + page size via
+    monkeypatch (auto-reverted after the test) rather than depending on the
+    shared module-scoped fixture's product count or test ordering. Uses a
+    file-based DB, not :memory:, since each request opens a new connection
+    and sqlite's :memory: DB is connection-scoped (a fresh one per connection)."""
+    import src.web.routes.watchlist as watchlist_mod
+
+    pag_engine = create_engine("sqlite:///" + str(tmp_path / "pagination_test.db"))
+    Base.metadata.create_all(pag_engine)
+    with Session(pag_engine) as s:
+        s.add_all([
+            Product(name="Aaa Whisky 700mL", brand="Aaa", category="whisky", volume_ml=700),
+            Product(name="Zzz Vodka 700mL", brand="Zzz", category="vodka", volume_ml=700),
+        ])
+        s.commit()
+
+    monkeypatch.setattr(watchlist_mod, "engine", pag_engine)
+    monkeypatch.setattr(watchlist_mod, "WATCHLIST_PAGE_SIZE", 1)
+
+    resp = client.get("/watchlist/list")
+    assert resp.status_code == 200
+    assert "Aaa Whisky" in resp.text
+    assert "Zzz Vodka" not in resp.text
+    match = re.search(r'hx-get="(/watchlist/list\?offset=1[^"]*)"', resp.text)
+    assert match, "expected a Load more button pointing at offset=1"
+
+    resp2 = client.get(match.group(1))
+    assert resp2.status_code == 200
+    assert "Zzz Vodka" in resp2.text
+    assert "Load more" not in resp2.text
+
+
 def test_criteria_loads(client):
     resp = client.get("/criteria")
     assert resp.status_code == 200

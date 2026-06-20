@@ -1,8 +1,10 @@
+{% set abv_tip = chip_abv_tooltip(product, siblings) %}
 <button type="button"
   class="btn btn-sm {{ 'btn-success' if watching else 'btn-outline-secondary' }} watchlist-chip"
   hx-post="/watchlist/toggle-volume"
   hx-vals='{"product_id": {{ product.id }}}'
   hx-target="this"
-  hx-swap="outerHTML">
+  hx-swap="outerHTML"
+  {% if abv_tip %}title="{{ abv_tip }}"{% endif %}>
   {% if product.volume_ml %}{{ product.volume_ml }}mL{% else %}—{% endif %}
 </button>
