@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from sqlalchemy.orm import Session
@@ -61,43 +61,72 @@ def run_digest():
     send_digest(build_apprise(Settings()), deals, criteria)
 
 
+def _initial_run_time(
+    session: Session, source: str, interval: timedelta, fallback: datetime
+) -> datetime:
+    """Next_run_time for a job at process startup: respects time since this
+    source's last attempt (any status) rather than restarting the cadence
+    from process-start. Falls back to `fallback` only if no ScrapeRun exists
+    yet for this source (cold start)."""
+    last = (
+        session.query(ScrapeRun)
+        .filter(ScrapeRun.source == source)
+        .order_by(ScrapeRun.started_at.desc())
+        .first()
+    )
+    if last is None or last.started_at is None:
+        return fallback
+    last_started_utc = last.started_at.replace(tzinfo=timezone.utc)
+    return max(datetime.now(timezone.utc), last_started_utc + interval)
+
+
 def main():
     scheduler = BlockingScheduler(timezone="Australia/Sydney")
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
 
     # Stagger start times so retailers aren't all hit at once — each job's
     # own interval stays a clean 6h/12h; only the first run is offset (via
     # next_run_time). Using `hours=6, minutes=15` etc. on "interval" would
-    # change the *period* to 6h15m, not just the start time.
+    # change the *period* to 6h15m, not just the start time. On restart,
+    # _initial_run_time overrides this offset with time-since-last-run so a
+    # container rebuild doesn't re-trigger every scraper immediately.
+    with Session(engine) as session:
+        danmurphys_next = _initial_run_time(session, "danmurphys", timedelta(hours=6), now)
+        bws_next = _initial_run_time(session, "bws", timedelta(hours=6), now + timedelta(minutes=15))
+        liquorland_next = _initial_run_time(session, "liquorland", timedelta(hours=6), now + timedelta(minutes=30))
+        firstchoice_next = _initial_run_time(session, "firstchoice", timedelta(hours=6), now + timedelta(minutes=45))
+        cellarmasters_next = _initial_run_time(session, "cellarmasters", timedelta(hours=12), now + timedelta(minutes=60))
+        vintagecellars_next = _initial_run_time(session, "vintagecellars", timedelta(hours=12), now + timedelta(minutes=75))
+
     scheduler.add_job(
         run_scraper, "interval", hours=6,
         args=[DanMurphysScraper, "danmurphys"],
-        next_run_time=now,
+        next_run_time=danmurphys_next,
     )
     scheduler.add_job(
         run_scraper, "interval", hours=6,
         args=[BWSScraper, "bws"],
-        next_run_time=now + timedelta(minutes=15),
+        next_run_time=bws_next,
     )
     scheduler.add_job(
         run_scraper, "interval", hours=6,
         args=[LiquorlandScraper, "liquorland"],
-        next_run_time=now + timedelta(minutes=30),
+        next_run_time=liquorland_next,
     )
     scheduler.add_job(
         run_scraper, "interval", hours=6,
         args=[FirstChoiceScraper, "firstchoice"],
-        next_run_time=now + timedelta(minutes=45),
+        next_run_time=firstchoice_next,
     )
     scheduler.add_job(
         run_scraper, "interval", hours=12,
         args=[CellarMastersScraper, "cellarmasters"],
-        next_run_time=now + timedelta(minutes=60),
+        next_run_time=cellarmasters_next,
     )
     scheduler.add_job(
         run_scraper, "interval", hours=12,
         args=[VintageCellarsScraper, "vintagecellars"],
-        next_run_time=now + timedelta(minutes=75),
+        next_run_time=vintagecellars_next,
     )
 
     # Score + fire immediate alerts ~15 minutes after the last scraper starts
