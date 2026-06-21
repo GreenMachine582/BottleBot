@@ -65,15 +65,16 @@
     });
   </script>
   <script>
-    // Render any [data-utc] timestamp in the viewer's local timezone.
-    // Server emits UTC ISO8601 strings since DB datetimes are stored naive-UTC.
+    // The visible text for any [data-utc] timestamp stays exactly as the
+    // server rendered it (a fixed, unambiguous UTC format) — we only attach
+    // a hover tooltip showing the viewer's local-time equivalent.
     function localizeDatetimes(root) {
       (root || document).querySelectorAll("[data-utc]").forEach(function (el) {
         var iso = el.getAttribute("data-utc");
         if (!iso) return;
         var d = new Date(iso);
         if (isNaN(d.getTime())) return;
-        el.textContent = d.toLocaleString();
+        el.title = d.toLocaleString() + " (local time)";
         el.removeAttribute("data-utc");
       });
     }
