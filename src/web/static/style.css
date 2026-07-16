@@ -36,15 +36,6 @@ tr.highlight td {
   border-left: 4px solid #f5c518;
 }
 
-/* Criteria / other error banners */
-.error-banner {
-  border-left: 4px solid #e05555;
-}
-.error-banner pre {
-  font-size: 0.8rem;
-  white-space: pre-wrap;
-}
-
 /* Failed scrape run row */
 tr.failed-run td {
   color: #e05555;
