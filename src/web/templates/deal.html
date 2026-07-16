@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "stat_card.html" import gth_stat_card %}
 {% block title %}{{ product.name if product else "Deal" }}{% endblock %}
 {% block content %}
 
@@ -109,45 +110,30 @@
 {% if latest %}
 <div class="row g-3 mb-4">
   <div class="col-6 col-md-3">
-    <div class="metric-card">
-      <div class="metric-label">Current</div>
-      <div class="metric-value">${{ "%.2f"|format(latest.price_aud) }}</div>
-      {% if latest.on_sale %}<div class="metric-delta text-success">On sale</div>{% endif %}
-    </div>
+    {{ gth_stat_card("Current", "$" ~ "%.2f"|format(latest.price_aud),
+        delta=("On sale" if latest.on_sale else None), delta_tone="good") }}
   </div>
   {% if avg_30d %}
+  {% set d30 = latest.price_aud - avg_30d %}
   <div class="col-6 col-md-3">
-    <div class="metric-card">
-      <div class="metric-label">30-day avg</div>
-      <div class="metric-value">${{ "%.2f"|format(avg_30d) }}</div>
-      {% set d30 = latest.price_aud - avg_30d %}
-      <div class="metric-delta {% if d30 < 0 %}text-success{% elif d30 > 0 %}text-danger{% endif %}">
-        {% if d30 != 0 %}{{ "%+.2f"|format(d30) }}{% else %}—{% endif %}
-      </div>
-    </div>
+    {{ gth_stat_card("30-day avg", "$" ~ "%.2f"|format(avg_30d),
+        delta=("%+.2f"|format(d30) if d30 != 0 else "—"),
+        delta_tone=("good" if d30 < 0 else ("bad" if d30 > 0 else "neutral"))) }}
   </div>
   {% endif %}
   {% if avg_90d %}
+  {% set d90 = latest.price_aud - avg_90d %}
   <div class="col-6 col-md-3">
-    <div class="metric-card">
-      <div class="metric-label">90-day avg</div>
-      <div class="metric-value">${{ "%.2f"|format(avg_90d) }}</div>
-      {% set d90 = latest.price_aud - avg_90d %}
-      <div class="metric-delta {% if d90 < 0 %}text-success{% elif d90 > 0 %}text-danger{% endif %}">
-        {% if d90 != 0 %}{{ "%+.2f"|format(d90) }}{% else %}—{% endif %}
-      </div>
-    </div>
+    {{ gth_stat_card("90-day avg", "$" ~ "%.2f"|format(avg_90d),
+        delta=("%+.2f"|format(d90) if d90 != 0 else "—"),
+        delta_tone=("good" if d90 < 0 else ("bad" if d90 > 0 else "neutral"))) }}
   </div>
   {% endif %}
   {% if all_time_low is not none %}
+  {% set high_part = ('<span class="text-danger">$' ~ "%.2f"|format(all_time_high) ~ '</span>') if all_time_high is not none else "—" %}
   <div class="col-6 col-md-3">
-    <div class="metric-card">
-      <div class="metric-label">All-time</div>
-      <div class="metric-value text-success">${{ "%.2f"|format(all_time_low) }}</div>
-      <div class="metric-delta text-secondary">
-        low / {% if all_time_high is not none %}<span class="text-danger">${{ "%.2f"|format(all_time_high) }}</span>{% else %}—{% endif %} high
-      </div>
-    </div>
+    {{ gth_stat_card("All-time", "$" ~ "%.2f"|format(all_time_low),
+        delta="low / " ~ high_part ~ " high", delta_tone="neutral", value_tone="good") }}
   </div>
   {% endif %}
 </div>

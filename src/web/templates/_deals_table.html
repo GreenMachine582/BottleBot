@@ -1,5 +1,5 @@
-{% if deals %}
-{% for deal in deals %}
+{% from "table.html" import gth_table_body %}
+{% call(deal) gth_table_body(rows=deals, empty_message="No deals match your filters.", colspan=7) %}
 <tr class="{% if deal.score >= 85 %}hot{% elif deal.is_watchlist %}watchlist{% endif %}">
   <td>
     <strong>{{ deal.score }}</strong>
@@ -19,7 +19,4 @@
   <td>{% if deal.cpl_aud %}${{ "%.2f"|format(deal.cpl_aud) }}{% else %}—{% endif %}</td>
   <td>{% if deal.bulk_saving_12 %}<span class="badge text-bg-success">save ${{ "%.0f"|format(deal.bulk_saving_12) }}</span>{% endif %}</td>
 </tr>
-{% endfor %}
-{% else %}
-<tr><td colspan="7" class="text-center text-secondary py-4">No deals match your filters.</td></tr>
-{% endif %}
+{% endcall %}

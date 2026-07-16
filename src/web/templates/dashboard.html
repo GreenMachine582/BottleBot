@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% from "table.html" import gth_table %}
+{% from "empty_state.html" import gth_empty_state %}
 {% block title %}Deals{% endblock %}
 {% block content %}
 
@@ -58,26 +60,11 @@
 {% endif %}
 
 {% if deals %}
-<div class="table-responsive">
-<table class="table table-hover align-middle">
-  <thead>
-    <tr>
-      <th>Score</th>
-      <th>Product</th>
-      <th>Retailer</th>
-      <th>Price</th>
-      <th>Real disc.</th>
-      <th>$/L</th>
-      <th>Buy 12</th>
-    </tr>
-  </thead>
-  <tbody id="deals-tbody">
-    {% include "_deals_table.html" %}
-  </tbody>
-</table>
-</div>
+{% call gth_table(headers=["Score", "Product", "Retailer", "Price", "Real disc.", "$/L", "Buy 12"], tbody_id="deals-tbody") %}
+{% include "_deals_table.html" %}
+{% endcall %}
 {% else %}
-<p>No deals above score {{ min_score }} right now. Trigger a scrape to update prices:</p>
+{% call gth_empty_state(message="No deals above score " ~ min_score ~ " right now. Trigger a scrape to update prices:") %}
 <div class="d-flex flex-wrap gap-2 mt-2 mb-3">
   {% for source in ["danmurphys", "bws", "liquorland", "firstchoice", "cellarmasters", "vintagecellars"] %}
   <button class="btn btn-sm btn-outline-secondary"
@@ -92,6 +79,7 @@
     Scrape all
   </button>
 </div>
+{% endcall %}
 {% endif %}
 
 {% endblock %}
