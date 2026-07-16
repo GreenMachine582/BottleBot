@@ -30,3 +30,4 @@ templates.env.globals["nav_items"] = [
 ]
 templates.env.globals["theme_css_url"] = "/gth-static/theme.css"
 templates.env.globals["icons_css_url"] = "/gth-assets/icons/bootstrap-icons.min.css"
+templates.env.globals["toast_js_url"] = "/gth-assets/js/toast.js"

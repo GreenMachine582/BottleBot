@@ -1,6 +1,6 @@
-import json
 from datetime import datetime, timedelta
 
+import greentechhub_ui
 from fastapi import APIRouter, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
@@ -25,11 +25,6 @@ _SCRAPERS = {
     "cellarmasters": CellarMastersScraper,
     "vintagecellars": VintageCellarsScraper,
 }
-
-
-def _toast(message: str, kind: str = "success") -> str:
-    """Build an HX-Trigger header value for a toast notification."""
-    return json.dumps({"showToast": {"message": message, "kind": kind}})
 
 
 def _check_can_run(source: str, cooldown_minutes: int) -> tuple[bool, str]:
@@ -79,12 +74,12 @@ async def trigger_scrape(source: str, background_tasks: BackgroundTasks):
     ok, reason = _check_can_run(source, settings.scrape_cooldown_minutes)
     if not ok:
         resp = HTMLResponse("", status_code=409)
-        resp.headers["HX-Trigger"] = _toast(reason, "warning")
+        resp.headers["HX-Trigger"] = greentechhub_ui.toast(reason, "warning")
         return resp
 
     background_tasks.add_task(_run_source, source)
     resp = HTMLResponse("", status_code=204)
-    resp.headers["HX-Trigger"] = _toast(f"Scraper queued for {source}")
+    resp.headers["HX-Trigger"] = greentechhub_ui.toast(f"Scraper queued for {source}")
     return resp
 
 
@@ -104,7 +99,9 @@ async def trigger_all(background_tasks: BackgroundTasks):
 
     if not queued and skipped:
         resp = HTMLResponse("", status_code=409)
-        resp.headers["HX-Trigger"] = _toast(f"All scrapers busy or on cooldown", "warning")
+        resp.headers["HX-Trigger"] = greentechhub_ui.toast(
+            "All scrapers busy or on cooldown", "warning"
+        )
         return resp
 
     msg = f"Queued: {', '.join(queued)}"
@@ -112,5 +109,5 @@ async def trigger_all(background_tasks: BackgroundTasks):
         msg += f" · Skipped {len(skipped)} (busy/cooldown)"
 
     resp = HTMLResponse("", status_code=204)
-    resp.headers["HX-Trigger"] = _toast(msg)
+    resp.headers["HX-Trigger"] = greentechhub_ui.toast(msg)
     return resp

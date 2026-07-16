@@ -1,6 +1,6 @@
-import json
 from urllib.parse import urlencode
 
+import greentechhub_ui
 import yaml
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -24,11 +24,6 @@ router = APIRouter()
 
 CRITERIA_PATH = "config/criteria.yaml"
 WATCHLIST_PAGE_SIZE = 20
-
-
-def _toast(message: str, kind: str = "success") -> str:
-    """Build an HX-Trigger header value for a toast notification."""
-    return json.dumps({"showToast": {"message": message, "kind": kind}})
 
 
 def _paginate(
@@ -144,7 +139,7 @@ async def toggle_category(request: Request, category: str = Form(...)):
         "label": label,
         "watching": now_on,
     })
-    resp.headers["HX-Trigger"] = _toast(
+    resp.headers["HX-Trigger"] = greentechhub_ui.toast(
         f"{label} {'added to' if now_on else 'removed from'} watchlist"
     )
     return resp
@@ -179,7 +174,7 @@ async def toggle_volume(request: Request, product_id: int = Form(...)):
         "watching": now_on,
         "siblings": siblings,
     })
-    resp.headers["HX-Trigger"] = _toast(
+    resp.headers["HX-Trigger"] = greentechhub_ui.toast(
         f"{product.volume_ml}mL {'added to' if now_on else 'removed from'} watchlist"
     )
     return resp
