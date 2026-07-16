@@ -1,7 +1,10 @@
 # docker-compose.yml
 services:
   bottlebot:
-    build: .
+    build:
+      context: .
+      additional_contexts:
+        greentechhub_ui: ${GREENTECHHUB_UI_PATH:-../greentechhub-ui}
     container_name: bottlebot-scraper
     restart: unless-stopped
     volumes:
@@ -21,7 +24,10 @@ services:
     command: python -m src.scheduler
 
   bottlebot-web:
-    build: .
+    build:
+      context: .
+      additional_contexts:
+        greentechhub_ui: ${GREENTECHHUB_UI_PATH:-../greentechhub-ui}
     container_name: bottlebot-web
     restart: unless-stopped
     volumes:

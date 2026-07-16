@@ -1,5 +1,9 @@
 # requirements.txt
 
+# Shared UI framework — local editable install (sibling checkout; see
+# Dockerfile/docker-compose.yml for how this resolves in the Docker build)
+-e ../greentechhub-ui
+
 # Phase 1 — scraping & storage
 playwright
 tenacity
