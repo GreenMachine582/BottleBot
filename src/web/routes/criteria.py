@@ -17,6 +17,7 @@ async def get_criteria(request: Request):
     return templates.TemplateResponse(request, "criteria.html", {
         "criteria": criteria,
         "error": None,
+        "field_errors": {},
     })
 
 
@@ -39,10 +40,18 @@ async def update_criteria(
     try:
         Criteria.model_validate(raw)
     except ValidationError as exc:
+        field_errors: dict[str, list[str]] = {}
+        for err in exc.errors():
+            if err["loc"]:
+                field_errors.setdefault(str(err["loc"][-1]), []).append(err["msg"])
         criteria = load_criteria(CRITERIA_PATH)
         return templates.TemplateResponse(request, "criteria.html", {
             "criteria": criteria,
-            "error": str(exc),
+            "error": (
+                "Some values couldn't be saved — see the highlighted fields below."
+                if field_errors else str(exc)
+            ),
+            "field_errors": field_errors,
         }, status_code=422)
 
     with open(CRITERIA_PATH, "w") as f:

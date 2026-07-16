@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "form.html" import gth_form, gth_form_field %}
 {% block title %}Criteria{% endblock %}
 {% block content %}
 
@@ -7,50 +8,35 @@
    <a href="/static/criteria-help.txt">Full config reference ↗</a>
 </p>
 
-{% if error %}
-<div class="alert alert-danger error-banner" role="alert">
-  <h6 class="alert-heading mb-1">⚠️ Invalid values — changes not saved</h6>
-  <pre class="mb-0">{{ error }}</pre>
-</div>
-{% endif %}
-
-<form method="post" action="/criteria">
+{% call gth_form(action="/criteria", error=error, error_heading="⚠️ Invalid values — changes not saved") %}
   <div class="row g-4">
     <div class="col-md-6">
       <h3>Alerts</h3>
-      <div class="mb-3">
-        <label class="form-label" for="min_deal_score">Min deal score (0–100)</label>
-        <input type="number" step="0.1" min="0" max="100" class="form-control"
-          id="min_deal_score" name="min_deal_score" value="{{ criteria.alerts.min_deal_score }}">
-        <div class="form-text">Deals below this score are ignored entirely.</div>
-      </div>
-      <div class="mb-3">
-        <label class="form-label" for="immediate_threshold">Immediate alert threshold</label>
-        <input type="number" step="0.1" min="0" max="100" class="form-control"
-          id="immediate_threshold" name="immediate_threshold" value="{{ criteria.alerts.immediate_threshold }}">
-        <div class="form-text">Deals at or above this score fire an alert straight away rather than waiting for the digest.</div>
-      </div>
+      {{ gth_form_field("min_deal_score", "Min deal score (0–100)",
+          value=criteria.alerts.min_deal_score, type="number", step="0.1", min="0", max="100",
+          errors=field_errors.get("min_deal_score"),
+          help_text="Deals below this score are ignored entirely.") }}
+      {{ gth_form_field("immediate_threshold", "Immediate alert threshold",
+          value=criteria.alerts.immediate_threshold, type="number", step="0.1", min="0", max="100",
+          errors=field_errors.get("immediate_threshold"),
+          help_text="Deals at or above this score fire an alert straight away rather than waiting for the digest.") }}
     </div>
 
     <div class="col-md-6">
       <h3>Thresholds</h3>
-      <div class="mb-3">
-        <label class="form-label" for="min_discount_pct">Min real discount %</label>
-        <input type="number" step="0.1" min="0" class="form-control"
-          id="min_discount_pct" name="min_discount_pct" value="{{ criteria.thresholds.min_discount_pct }}">
-        <div class="form-text">Discount vs 90-day average, not the retailer's "was" price.</div>
-      </div>
-      <div class="mb-3">
-        <label class="form-label" for="min_saving_aud">Min saving (AUD)</label>
-        <input type="number" step="0.1" min="0" class="form-control"
-          id="min_saving_aud" name="min_saving_aud" value="{{ criteria.thresholds.min_saving_aud }}">
-        <div class="form-text">Absolute dollar saving per unit.</div>
-      </div>
+      {{ gth_form_field("min_discount_pct", "Min real discount %",
+          value=criteria.thresholds.min_discount_pct, type="number", step="0.1", min="0",
+          errors=field_errors.get("min_discount_pct"),
+          help_text="Discount vs 90-day average, not the retailer's \"was\" price.") }}
+      {{ gth_form_field("min_saving_aud", "Min saving (AUD)",
+          value=criteria.thresholds.min_saving_aud, type="number", step="0.1", min="0",
+          errors=field_errors.get("min_saving_aud"),
+          help_text="Absolute dollar saving per unit.") }}
     </div>
   </div>
 
   <button type="submit" class="btn btn-primary">Save</button>
-</form>
+{% endcall %}
 
 <p class="hint mt-3">
   Category weights, CPL caps, brand lists, and scoring weights are still edited directly
