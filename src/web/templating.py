@@ -23,9 +23,10 @@ templates.env.globals["chip_abv_tooltip"] = chip_abv_tooltip
 # greentechhub-ui shared shell context — see greentechhub-ui/docs/contract.md
 templates.env.globals["brand"] = greentechhub_ui.theme.brand_context(service_name="BottleBot")
 templates.env.globals["nav_items"] = [
-    {"label": "Deals", "url": "/"},
-    {"label": "Watchlist", "url": "/watchlist"},
-    {"label": "Criteria", "url": "/criteria"},
-    {"label": "Health", "url": "/health"},
+    {"label": "Deals", "url": "/", "icon": "cart"},
+    {"label": "Watchlist", "url": "/watchlist", "icon": "star"},
+    {"label": "Criteria", "url": "/criteria", "icon": "sliders"},
+    {"label": "Health", "url": "/health", "icon": "activity"},
 ]
 templates.env.globals["theme_css_url"] = "/gth-static/theme.css"
+templates.env.globals["icons_css_url"] = "/gth-assets/icons/bootstrap-icons.min.css"
