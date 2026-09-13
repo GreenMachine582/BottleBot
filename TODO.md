@@ -12,16 +12,16 @@
 - [x] Replace hand-rolled navbar with `gth-navbar`
 - [ ] Migrate remaining components one at a time (done so far: `deal.html`'s metric tiles →
       `gth-stat-card`; dashboard's deals table + both its empty states → `gth-table`/`gth-table_body`/
-      `gth-empty-state`)
-  - [ ] Watchlist pagination — `src/web/routes/watchlist.py`'s hand-rolled `_paginate()`
-        (offset slicing + manual `next_url`, lines 29–51) and `templates/watchlist.html` /
-        `_watchlist_list.html` → `gth_pagination` (`greentechhub_ui/components/pagination.html`)
+      `gth-empty-state`; watchlist pagination, health tables, criteria tables — see below.
+      Remaining: other cards)
+  - [x] Watchlist pagination — `_watchlist_list.html`'s hand-rolled "load more" button →
+        `gth_pagination` (`greentechhub_ui/components/pagination.html`). `watchlist.py`'s
+        `_paginate()` offset-slicing logic is unchanged — only the rendering moved.
   - [ ] Other cards — spot-check `templates/deal.html` / `templates/dashboard.html` for any
         remaining non-migrated card markup
-  - [ ] Health tables — `templates/health.html`, `_scrape_runs_table.html`,
-        `_notification_log_table.html` (raw `<table class="table table-sm">`) →
+  - [x] Health tables — `_scrape_runs_table.html`, `_notification_log_table.html` →
         `gth_table` / `gth_table_body`
-  - [ ] Criteria tables — `templates/criteria.html` (raw `<table class="table table-sm">`) →
+  - [x] Criteria tables — `templates/criteria.html` (scoring weights + category multipliers) →
         `gth_table` / `gth_table_body`
 
 Not a gap — staying as-is: `.watchlist-pill` / `.watchlist-chip`, `.timeline`, and the

@@ -14,21 +14,9 @@
   </button>
 </div>
 
-{% if runs %}
-<div class="table-responsive">
-<table class="table table-hover align-middle">
-  <thead>
-    <tr>
-      <th>Source</th>
-      <th>Started</th>
-      <th>Duration</th>
-      <th>Seen</th>
-      <th>New prices</th>
-      <th>Status</th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for run in runs %}
+{% from "table.html" import gth_table, gth_table_body %}
+{% call gth_table(headers=["Source", "Started", "Duration", "Seen", "New prices", "Status"]) %}
+{% call(run) gth_table_body(rows=runs, empty_message="No scrape runs recorded yet.", colspan=6) %}
     {% set duration = None %}
     {% if run.started_at and run.finished_at %}
       {% set duration = (run.finished_at - run.started_at).total_seconds() | int %}
@@ -57,13 +45,8 @@
         {% endif %}
       </td>
     </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-{% else %}
-<p class="hint">No scrape runs recorded yet.</p>
-{% endif %}
+{% endcall %}
+{% endcall %}
 
 {# Self-cancelling HTMX poll: only present when a run is active #}
 {% if any_running %}

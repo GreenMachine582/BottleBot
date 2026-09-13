@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "form.html" import gth_form, gth_form_field %}
+{% from "table.html" import gth_table, gth_table_body %}
 {% block title %}Criteria{% endblock %}
 {% block content %}
 
@@ -45,32 +46,23 @@
 </p>
 
 <h3>Current scoring weights</h3>
-<div class="table-responsive">
-<table class="table table-sm">
-  <thead><tr><th>Component</th><th>Weight</th></tr></thead>
-  <tbody>
-    <tr><td>Real discount %</td><td>{{ criteria.scoring.weights.real_discount_pct }}</td></tr>
-    <tr><td>Cost per litre</td><td>{{ criteria.scoring.weights.cpl_rating }}</td></tr>
-    <tr><td>Bulk-buy value</td><td>{{ criteria.scoring.weights.bulk_value }}</td></tr>
-    <tr><td>Category preference</td><td>{{ criteria.scoring.weights.category_pref }}</td></tr>
-  </tbody>
-</table>
-</div>
+{% set weight_rows = [
+  ("Real discount %", criteria.scoring.weights.real_discount_pct),
+  ("Cost per litre", criteria.scoring.weights.cpl_rating),
+  ("Bulk-buy value", criteria.scoring.weights.bulk_value),
+  ("Category preference", criteria.scoring.weights.category_pref),
+] %}
+{% call gth_table(headers=["Component", "Weight"]) %}
+{% call(row) gth_table_body(rows=weight_rows, colspan=2) %}
+    <tr><td>{{ row[0] }}</td><td>{{ row[1] }}</td></tr>
+{% endcall %}
+{% endcall %}
 
 <h3>Current category multipliers</h3>
-{% if criteria.categories %}
-<div class="table-responsive">
-<table class="table table-sm">
-  <thead><tr><th>Category</th><th>Multiplier</th></tr></thead>
-  <tbody>
-  {% for cat, mult in criteria.categories.items() %}
-    <tr><td>{{ cat }}</td><td>{{ mult }}</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-{% else %}
-<p class="hint">No category multipliers configured.</p>
-{% endif %}
+{% call gth_table(headers=["Category", "Multiplier"]) %}
+{% call(row) gth_table_body(rows=criteria.categories.items(), empty_message="No category multipliers configured.", colspan=2) %}
+    <tr><td>{{ row[0] }}</td><td>{{ row[1] }}</td></tr>
+{% endcall %}
+{% endcall %}
 
 {% endblock %}

@@ -1,15 +1,9 @@
+{% from "pagination.html" import gth_pagination %}
 {% if groups %}
 {% for group in groups %}
 {% include "_watchlist_product_card.html" %}
 {% endfor %}
-{% if next_url %}
-<div class="text-center py-2">
-  <button type="button" class="btn btn-sm btn-outline-secondary"
-    hx-get="{{ next_url }}" hx-target="this" hx-swap="outerHTML">
-    Load more
-  </button>
-</div>
-{% endif %}
+{{ gth_pagination(next_url) }}
 {% else %}
 <div class="text-center text-secondary py-4">No products match your filters.</div>
 {% endif %}

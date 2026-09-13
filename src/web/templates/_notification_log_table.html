@@ -1,18 +1,6 @@
-{% if logs %}
-<div class="table-responsive">
-<table class="table table-hover align-middle">
-  <thead>
-    <tr>
-      <th>Dispatched</th>
-      <th>Channel</th>
-      <th>Type</th>
-      <th>Product</th>
-      <th>Score</th>
-      <th>Price</th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for lg in logs %}
+{% from "table.html" import gth_table, gth_table_body %}
+{% call gth_table(headers=["Dispatched", "Channel", "Type", "Product", "Score", "Price"]) %}
+{% call(lg) gth_table_body(rows=logs, empty_message="No notifications sent yet. Alerts are dispatched when deals score above the immediate threshold.", colspan=6) %}
     <tr>
       <td>
         {% if lg.dispatched_at %}
@@ -38,10 +26,5 @@
       <td>{% if lg.score is not none %}{{ lg.score | int }}{% else %}—{% endif %}</td>
       <td>{% if lg.price_aud is not none %}${{ "%.2f"|format(lg.price_aud) }}{% else %}—{% endif %}</td>
     </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-{% else %}
-<p class="hint">No notifications sent yet. Alerts are dispatched when deals score above the immediate threshold.</p>
-{% endif %}
+{% endcall %}
+{% endcall %}
