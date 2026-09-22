@@ -1,12 +1,12 @@
 # requirements.txt
 
-# Shared UI framework — local editable install (sibling checkout; see
-# Dockerfile/docker-compose.yml for how this resolves in the Docker build)
--e ../greentechhub-ui
+# Shared UI framework — pinned to a tagged release, same pattern
+# greentechhub-fastapi below uses for its own greentechhub-core dependency
+greentechhub-ui @ git+https://github.com/GreenMachine582/greentechhub-ui.git@v0.6.0
 
-# Shared FastAPI registration helpers (register_health, etc.) — local editable
-# install, same sibling-checkout pattern as greentechhub-ui above
--e ../greentechhub-fastapi
+# Shared FastAPI registration helpers (register_health, etc.) — pinned to a
+# tagged release, same pattern as greentechhub-ui above
+greentechhub-fastapi @ git+https://github.com/GreenMachine582/greentechhub-fastapi.git@v0.5.0
 
 # Phase 1 — scraping & storage
 playwright
