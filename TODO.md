@@ -30,7 +30,13 @@ business styling, not theme duplication.
 
 ## `greentechhub-fastapi` adoption
 
-- [ ] Swap hand-rolled `/health` and `/health/runs` (`src/web/routes/health.py`) for `register_health`
+- [x] Swap hand-rolled `/health` and `/health/runs` for `register_health` — done 2026-09-22: the
+      old dashboard (scrape runs, notifications, timeline) moved to `/activity` and
+      `/activity/runs` (`src/web/routes/activity.py`), since `register_health`'s `/health`/
+      `/health/ready` paths aren't configurable and would have collided. `/health/ready` runs a
+      DB check (`check_bottlebot_db`) against BottleBot's sync SQLAlchemy engine via
+      `asyncio.to_thread`, since `greentechhub-core`'s `check_database` expects an async-shaped
+      engine.
 - [ ] Swap the ad-hoc `_paginate()` offset-slicing (`src/web/routes/watchlist.py:29-51`) for the
       `query` / `PageParams` adapter
 - [ ] Adopt `register_auth`, if/when BottleBot grows a login (lowest priority — deferred upstream too)
