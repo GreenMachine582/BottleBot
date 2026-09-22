@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "stat_card.html" import gth_stat_card %}
+{% from "card.html" import gth_card %}
 {% block title %}{{ product.name if product else "Deal" }}{% endblock %}
 {% block content %}
 
@@ -11,8 +12,7 @@
 </nav>
 
 {# ── Main product card ── #}
-<div class="card mb-4">
-  <div class="card-body">
+{% call gth_card(card_class="mb-4") %}
     <div class="row g-4">
 
       {# Left: image + retailer identity #}
@@ -103,8 +103,7 @@
         {% endif %}
       </div>
     </div>
-  </div>
-</div>
+{% endcall %}
 
 {# ── Price metrics strip ── #}
 {% if latest %}
