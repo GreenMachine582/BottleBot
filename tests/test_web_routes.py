@@ -62,11 +62,11 @@ def client(tmp_path_factory):
     # Redirect all route modules to the test engine and temp criteria path
     import src.web.routes.dashboard as dash_mod
     import src.web.routes.deals as deals_mod
-    import src.web.routes.health as health_mod
+    import src.web.routes.activity as activity_mod
     import src.web.routes.watchlist as watchlist_mod
     import src.web.routes.criteria as criteria_mod
 
-    for mod in [dash_mod, deals_mod, health_mod, watchlist_mod]:
+    for mod in [dash_mod, deals_mod, activity_mod, watchlist_mod]:
         mod.engine = test_engine
     watchlist_mod.CRITERIA_PATH = criteria_path
     criteria_mod.CRITERIA_PATH = criteria_path
@@ -103,11 +103,41 @@ def test_dashboard_shows_empty_state(client):
     assert "No deals above score" in resp.text or "Today's deals" in resp.text
 
 
-def test_health_loads_and_shows_run(client):
-    resp = client.get("/health")
+def test_activity_loads_and_shows_run(client):
+    resp = client.get("/activity")
     assert resp.status_code == 200
     assert "danmurphys" in resp.text
     assert "success" in resp.text
+
+
+def test_liveness_returns_healthy(client):
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "healthy"}
+
+
+def test_readiness_returns_healthy_when_db_reachable(client):
+    resp = client.get("/health/ready")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "healthy"
+    assert body["checks"][0]["status"] == "healthy"
+
+
+def test_readiness_returns_503_when_db_unreachable(client, monkeypatch):
+    import src.web.routes.activity as activity_mod
+
+    class _BrokenEngine:
+        def connect(self):
+            raise RuntimeError("db down")
+
+    monkeypatch.setattr(activity_mod, "engine", _BrokenEngine())
+
+    resp = client.get("/health/ready")
+    assert resp.status_code == 503
+    body = resp.json()
+    assert body["status"] == "unhealthy"
+    assert body["checks"][0]["status"] == "unhealthy"
 
 
 def test_watchlist_loads(client):
