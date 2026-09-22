@@ -4,6 +4,10 @@
 # Dockerfile/docker-compose.yml for how this resolves in the Docker build)
 -e ../greentechhub-ui
 
+# Shared FastAPI registration helpers (register_health, etc.) — local editable
+# install, same sibling-checkout pattern as greentechhub-ui above
+-e ../greentechhub-fastapi
+
 # Phase 1 — scraping & storage
 playwright
 tenacity
