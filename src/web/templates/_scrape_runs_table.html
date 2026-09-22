@@ -1,4 +1,4 @@
-{# Trigger buttons — also used standalone from health tab #}
+{# Trigger buttons — also used standalone from activity tab #}
 <div class="d-flex flex-wrap gap-2 mb-3">
   {% for source in ["danmurphys", "bws", "liquorland", "firstchoice", "cellarmasters", "vintagecellars"] %}
   <button class="btn btn-sm btn-outline-secondary"
@@ -50,7 +50,7 @@
 
 {# Self-cancelling HTMX poll: only present when a run is active #}
 {% if any_running %}
-<div hx-get="/health/runs"
+<div hx-get="/activity/runs"
      hx-trigger="every 5s"
      hx-target="#scrape-runs-container"
      hx-swap="innerHTML">

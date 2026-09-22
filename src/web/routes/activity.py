@@ -1,7 +1,10 @@
+import asyncio
+import time
 from datetime import datetime
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
+from greentechhub_core.health import HealthResult
 from sqlalchemy.orm import Session
 
 from ...db.engine import engine
@@ -22,8 +25,8 @@ def _build_timeline(runs: list, logs: list) -> list[dict]:
     return events[:60]
 
 
-@router.get("/health", response_class=HTMLResponse)
-async def health(request: Request):
+@router.get("/activity", response_class=HTMLResponse)
+async def activity(request: Request):
     with Session(engine) as session:
         runs = (
             session.query(ScrapeRun)
@@ -41,7 +44,7 @@ async def health(request: Request):
         timeline = _build_timeline(runs, logs)
         session.expunge_all()
 
-    return templates.TemplateResponse(request, "health.html", {
+    return templates.TemplateResponse(request, "activity.html", {
         "runs": runs,
         "logs": logs,
         "any_running": any_running,
@@ -49,8 +52,8 @@ async def health(request: Request):
     })
 
 
-@router.get("/health/runs", response_class=HTMLResponse)
-async def health_runs(request: Request):
+@router.get("/activity/runs", response_class=HTMLResponse)
+async def activity_runs(request: Request):
     with Session(engine) as session:
         runs = (
             session.query(ScrapeRun)
@@ -65,3 +68,16 @@ async def health_runs(request: Request):
         "runs": runs,
         "any_running": any_running,
     })
+
+
+async def check_bottlebot_db() -> HealthResult:
+    start = time.perf_counter()
+    try:
+        def _ping():
+            with engine.connect() as conn:
+                conn.exec_driver_sql("SELECT 1")
+        await asyncio.to_thread(_ping)
+        status, detail = "healthy", ""
+    except Exception as exc:
+        status, detail = "unhealthy", str(exc) or type(exc).__name__
+    return HealthResult(status=status, detail=detail, latency_ms=(time.perf_counter() - start) * 1000)

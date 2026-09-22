@@ -3,9 +3,11 @@ from pathlib import Path
 import greentechhub_ui
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from greentechhub_fastapi import register_health
 
 from ..calendar import SaleCalendar
-from .routes import criteria, dashboard, deals, health, scrape, watchlist
+from .routes import activity, criteria, dashboard, deals, scrape, watchlist
+from .routes.activity import check_bottlebot_db
 from .templating import templates
 
 _here = Path(__file__).parent
@@ -23,5 +25,7 @@ app.include_router(dashboard.router)
 app.include_router(deals.router)
 app.include_router(watchlist.router)
 app.include_router(criteria.router)
-app.include_router(health.router)
+app.include_router(activity.router)
 app.include_router(scrape.router)
+
+register_health(app, checks=[check_bottlebot_db])

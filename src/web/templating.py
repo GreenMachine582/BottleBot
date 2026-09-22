@@ -27,7 +27,7 @@ templates.env.globals["nav_items"] = greentechhub_ui.navigation.build_nav_items(
         {"label": "Deals", "url": "/", "icon": "cart"},
         {"label": "Watchlist", "url": "/watchlist", "icon": "star"},
         {"label": "Criteria", "url": "/criteria", "icon": "sliders"},
-        {"label": "Health", "url": "/health", "icon": "activity"},
+        {"label": "Activity", "url": "/activity", "icon": "activity"},
     ],
 )
 templates.env.globals["theme_css_url"] = "/gth-static/theme.css"
