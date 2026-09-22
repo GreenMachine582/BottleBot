@@ -4,7 +4,9 @@ Each route is exercised against a real in-memory SQLite database so we
 confirm templates render without errors and all routes respond correctly.
 The engine in each route module is patched to point at the temp DB.
 """
+import json
 import re
+from datetime import datetime, timedelta
 
 import yaml
 import pytest
@@ -65,8 +67,9 @@ def client(tmp_path_factory):
     import src.web.routes.activity as activity_mod
     import src.web.routes.watchlist as watchlist_mod
     import src.web.routes.criteria as criteria_mod
+    import src.web.routes.scrape as scrape_mod
 
-    for mod in [dash_mod, deals_mod, activity_mod, watchlist_mod]:
+    for mod in [dash_mod, deals_mod, activity_mod, watchlist_mod, scrape_mod]:
         mod.engine = test_engine
     watchlist_mod.CRITERIA_PATH = criteria_path
     criteria_mod.CRITERIA_PATH = criteria_path
@@ -140,6 +143,108 @@ def test_readiness_returns_503_when_db_unreachable(client, monkeypatch):
     assert body["checks"][0]["status"] == "unhealthy"
 
 
+def test_scrape_trigger_unknown_source_404(client):
+    resp = client.post("/scrape/trigger/not-a-real-source")
+    assert resp.status_code == 404
+
+
+def test_scrape_trigger_running_returns_409_with_toast(client, monkeypatch, tmp_path):
+    import src.web.routes.scrape as scrape_mod
+
+    trig_engine = create_engine("sqlite:///" + str(tmp_path / "trigger_running.db"))
+    Base.metadata.create_all(trig_engine)
+    with Session(trig_engine) as s:
+        s.add(ScrapeRun(source="bws", started_at=datetime.utcnow(), status="running"))
+        s.commit()
+
+    monkeypatch.setattr(scrape_mod, "engine", trig_engine)
+
+    resp = client.post("/scrape/trigger/bws")
+    assert resp.status_code == 409
+    toast = json.loads(resp.headers["hx-trigger"])["showToast"]
+    assert toast["kind"] == "warning"
+    assert toast["message"] == "bws is already running"
+
+
+def test_scrape_trigger_cooldown_returns_409_with_toast(client, monkeypatch, tmp_path):
+    import src.web.routes.scrape as scrape_mod
+
+    trig_engine = create_engine("sqlite:///" + str(tmp_path / "trigger_cooldown.db"))
+    Base.metadata.create_all(trig_engine)
+    with Session(trig_engine) as s:
+        s.add(ScrapeRun(
+            source="danmurphys",
+            started_at=datetime.utcnow() - timedelta(minutes=2),
+            finished_at=datetime.utcnow() - timedelta(minutes=1),
+            status="success",
+        ))
+        s.commit()
+
+    monkeypatch.setattr(scrape_mod, "engine", trig_engine)
+
+    resp = client.post("/scrape/trigger/danmurphys")
+    assert resp.status_code == 409
+    toast = json.loads(resp.headers["hx-trigger"])["showToast"]
+    assert toast["kind"] == "warning"
+    assert "cooldown" in toast["message"]
+    assert "4m remaining" in toast["message"]
+
+
+def test_scrape_trigger_success_returns_204_with_toast(client, monkeypatch, tmp_path):
+    import src.web.routes.scrape as scrape_mod
+
+    trig_engine = create_engine("sqlite:///" + str(tmp_path / "trigger_success.db"))
+    Base.metadata.create_all(trig_engine)
+
+    monkeypatch.setattr(scrape_mod, "engine", trig_engine)
+    monkeypatch.setattr(scrape_mod, "_run_source", lambda source: None)
+
+    resp = client.post("/scrape/trigger/firstchoice")
+    assert resp.status_code == 204
+    toast = json.loads(resp.headers["hx-trigger"])["showToast"]
+    assert toast["kind"] == "success"
+    assert toast["message"] == "Scraper queued for firstchoice"
+
+
+def test_scrape_trigger_all_when_all_busy_returns_409(client, monkeypatch, tmp_path):
+    import src.web.routes.scrape as scrape_mod
+
+    trig_engine = create_engine("sqlite:///" + str(tmp_path / "trigger_all_busy.db"))
+    Base.metadata.create_all(trig_engine)
+    with Session(trig_engine) as s:
+        for source in scrape_mod._SCRAPERS:
+            s.add(ScrapeRun(source=source, started_at=datetime.utcnow(), status="running"))
+        s.commit()
+
+    monkeypatch.setattr(scrape_mod, "engine", trig_engine)
+
+    resp = client.post("/scrape/trigger")
+    assert resp.status_code == 409
+    toast = json.loads(resp.headers["hx-trigger"])["showToast"]
+    assert toast["kind"] == "warning"
+    assert toast["message"] == "All scrapers busy or on cooldown"
+
+
+def test_scrape_trigger_all_queues_available_sources(client, monkeypatch, tmp_path):
+    import src.web.routes.scrape as scrape_mod
+
+    trig_engine = create_engine("sqlite:///" + str(tmp_path / "trigger_all_mixed.db"))
+    Base.metadata.create_all(trig_engine)
+    with Session(trig_engine) as s:
+        s.add(ScrapeRun(source="danmurphys", started_at=datetime.utcnow(), status="running"))
+        s.commit()
+
+    monkeypatch.setattr(scrape_mod, "engine", trig_engine)
+    monkeypatch.setattr(scrape_mod, "_run_source", lambda source: None)
+
+    resp = client.post("/scrape/trigger")
+    assert resp.status_code == 204
+    toast = json.loads(resp.headers["hx-trigger"])["showToast"]
+    assert toast["kind"] == "success"
+    assert "Queued:" in toast["message"]
+    assert "Skipped 1" in toast["message"]
+
+
 def test_watchlist_loads(client):
     resp = client.get("/watchlist")
     assert resp.status_code == 200
@@ -151,10 +256,15 @@ def test_watchlist_toggle_category(client):
     resp = client.post("/watchlist/toggle-category", data={"category": "whisky"})
     assert resp.status_code == 200
     assert "btn-success" in resp.text
+    toast = json.loads(resp.headers["hx-trigger"])["showToast"]
+    assert "added to watchlist" in toast["message"]
+    assert toast["kind"] == "success"
 
     resp = client.post("/watchlist/toggle-category", data={"category": "whisky"})
     assert resp.status_code == 200
     assert "btn-success" not in resp.text
+    toast = json.loads(resp.headers["hx-trigger"])["showToast"]
+    assert "removed from watchlist" in toast["message"]
 
 
 def test_watchlist_toggle_category_rejects_unknown_category(client):
@@ -172,10 +282,15 @@ def test_watchlist_toggle_volume(client):
     resp = client.post("/watchlist/toggle-volume", data={"product_id": product_id})
     assert resp.status_code == 200
     assert "btn-success" in resp.text
+    toast = json.loads(resp.headers["hx-trigger"])["showToast"]
+    assert "added to watchlist" in toast["message"]
+    assert toast["kind"] == "success"
 
     resp = client.post("/watchlist/toggle-volume", data={"product_id": product_id})
     assert resp.status_code == 200
     assert "btn-success" not in resp.text
+    toast = json.loads(resp.headers["hx-trigger"])["showToast"]
+    assert "removed from watchlist" in toast["message"]
 
 
 def test_watchlist_toggle_volume_unknown_id_returns_404(client):
