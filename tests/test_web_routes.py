@@ -217,13 +217,21 @@ def test_watchlist_list_paginates(client, monkeypatch, tmp_path):
     assert resp.status_code == 200
     assert "Aaa Whisky" in resp.text
     assert "Zzz Vodka" not in resp.text
-    match = re.search(r'hx-get="(/watchlist/list\?offset=1[^"]*)"', resp.text)
-    assert match, "expected a Load more button pointing at offset=1"
+    match = re.search(r'hx-get="(/watchlist/list\?page=2&amp;size=1[^"]*)"', resp.text)
+    assert match, "expected a Load more button pointing at page=2&size=1"
 
-    resp2 = client.get(match.group(1))
+    resp2 = client.get(match.group(1).replace("&amp;", "&"))
     assert resp2.status_code == 200
     assert "Zzz Vodka" in resp2.text
     assert "Load more" not in resp2.text
+
+
+def test_watchlist_list_rejects_invalid_page(client):
+    resp = client.get("/watchlist/list", params={"page": 0})
+    assert resp.status_code == 422
+
+    resp = client.get("/watchlist/list", params={"size": 101})
+    assert resp.status_code == 422
 
 
 def test_criteria_loads(client):
