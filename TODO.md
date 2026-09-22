@@ -10,16 +10,17 @@
 
 - [x] Drop custom `static/style.css` overrides in favor of the shared theme
 - [x] Replace hand-rolled navbar with `gth-navbar`
-- [ ] Migrate remaining components one at a time (done so far: `deal.html`'s metric tiles →
+- [x] Migrate remaining components one at a time (done: `deal.html`'s metric tiles →
       `gth-stat-card`; dashboard's deals table + both its empty states → `gth-table`/`gth-table_body`/
-      `gth-empty-state`; watchlist pagination, health tables, criteria tables — see below.
-      Remaining: other cards)
+      `gth-empty-state`; watchlist pagination, health tables, criteria tables — see below; other
+      cards — see below)
   - [x] Watchlist pagination — `_watchlist_list.html`'s hand-rolled "load more" button →
         `gth_pagination` (`greentechhub_ui/components/pagination.html`). `watchlist.py`'s
         offset-slicing logic has since moved to page/size — see `greentechhub-fastapi` adoption
         below.
-  - [ ] Other cards — spot-check `templates/deal.html` / `templates/dashboard.html` for any
-        remaining non-migrated card markup
+  - [x] Other cards — done 2026-09-22: `deal.html`'s main product card and
+        `_watchlist_product_card.html`'s per-group card, the last two hand-rolled
+        `<div class="card">`s in the templates, both now use `gth_card`
   - [x] Health tables — `_scrape_runs_table.html`, `_notification_log_table.html` →
         `gth_table` / `gth_table_body`
   - [x] Criteria tables — `templates/criteria.html` (scoring weights + category multipliers) →
@@ -53,8 +54,12 @@ business styling, not theme duplication.
 
 ## Packaging / deployment follow-up
 
-- [ ] Once `greentechhub-ui` ships a pinned release, switch `requirements.txt` from
+- [x] Once `greentechhub-ui` ships a pinned release, switch `requirements.txt` from
       `-e ../greentechhub-ui` to a pinned git-tag dependency (matching how `greentechhub-fastapi`
       and `greentechhub-ui` already pin `greentechhub-core`, e.g. `v0.6.0`), and drop the
       `GREENTECHHUB_UI_PATH` build-context plumbing in `Dockerfile` / `docker-compose.yml` /
-      `.env.example`
+      `.env.example` — done 2026-09-22: both `greentechhub-ui` (`v0.6.0`) and `greentechhub-fastapi`
+      (`v0.5.0`) now have tagged releases pushed to their remotes, so `requirements.txt` pins both
+      as `git+https://...@v0.x.0` dependencies (same pattern `greentechhub-fastapi` already used for
+      `greentechhub-core`). Dropped the `additional_contexts`/`COPY --from=...` build-context
+      plumbing entirely — the Docker build no longer needs either sibling repo checked out locally.
