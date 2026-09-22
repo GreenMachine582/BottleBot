@@ -2,8 +2,10 @@ from urllib.parse import urlencode
 
 import greentechhub_ui
 import yaml
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse
+from greentechhub_core.query.types import Page
+from greentechhub_fastapi.query import PageParams
 from sqlalchemy.orm import Session
 
 from ...db.engine import engine
@@ -26,29 +28,45 @@ CRITERIA_PATH = "config/criteria.yaml"
 WATCHLIST_PAGE_SIZE = 20
 
 
-def _paginate(
-    groups: list[ProductGroup],
-    offset: int,
-    q: str,
-    category: str,
-    watchlist_only: bool,
-) -> dict:
-    """Slices `groups` to one page and builds the "load more" URL for the
-    next page (carrying the current filters), or None if this was the last."""
+def _watchlist_page_params(
+    page: int = Query(1, ge=1),
+    size: int | None = Query(None, ge=1, le=100),
+) -> PageParams:
+    """`size` defaults to `None` ("not specified") rather than baking
+    WATCHLIST_PAGE_SIZE into the Query(...) default directly — a Query
+    default is evaluated once at import time, so tests that monkeypatch
+    WATCHLIST_PAGE_SIZE on this module wouldn't affect it. Reading the
+    module global here, at call time, keeps that monkeypatchable."""
+    return PageParams(page=page, size=size if size is not None else WATCHLIST_PAGE_SIZE)
+
+
+def _slice_page(groups: list[ProductGroup], page: int, size: int) -> Page[ProductGroup]:
+    """PageParams/Page give validated page/size query params and a response
+    shape, but no slicing helper exists anywhere in greentechhub-core or
+    greentechhub-fastapi — this is that glue. sort/filter aren't wired up:
+    BottleBot's q/category/watchlist_only filtering happens against
+    SQLAlchemy Product rows and then in-Python grouping, not against a
+    directly-queryable source PageRequest's Filter/Sort could resolve
+    against, so to_page_request() would have nothing to do here."""
     total = len(groups)
-    page = groups[offset: offset + WATCHLIST_PAGE_SIZE]
-    next_offset = offset + WATCHLIST_PAGE_SIZE
-    next_url = None
-    if next_offset < total:
-        params = {"offset": next_offset}
-        if q:
-            params["q"] = q
-        if category:
-            params["category"] = category
-        if watchlist_only:
-            params["watchlist_only"] = "true"
-        next_url = "/watchlist/list?" + urlencode(params)
-    return {"groups": page, "next_url": next_url}
+    offset = (page - 1) * size
+    return Page(items=groups[offset: offset + size], total=total, page=page, size=size)
+
+
+def _next_url(page: Page, q: str, category: str, watchlist_only: bool) -> str | None:
+    """Builds the "load more" URL gth_pagination renders, carrying the
+    current filters — mirrors what the old offset-based _paginate() did,
+    since neither Page nor PageParams has any concept of a next_url."""
+    if page.page * page.size >= page.total:
+        return None
+    params = {"page": page.page + 1, "size": page.size}
+    if q:
+        params["q"] = q
+    if category:
+        params["category"] = category
+    if watchlist_only:
+        params["watchlist_only"] = "true"
+    return "/watchlist/list?" + urlencode(params)
 
 
 def _load_yaml() -> dict:
@@ -69,12 +87,14 @@ async def get_watchlist(request: Request):
         groups = group_products(products)
         session.expunge_all()
 
+    page = _slice_page(groups, 1, WATCHLIST_PAGE_SIZE)
     return templates.TemplateResponse(request, "watchlist.html", {
         "categories": CATEGORIES,
         "category_labels": CATEGORY_LABELS,
         "watched_categories": {c.lower() for c in criteria.watchlist.categories},
         "watch_products": criteria.watchlist.products,
-        **_paginate(groups, 0, "", "", False),
+        "groups": page.items,
+        "next_url": _next_url(page, "", "", False),
     })
 
 
@@ -84,7 +104,7 @@ async def filter_watchlist_list(
     q: str = "",
     category: str = "",
     watchlist_only: bool = False,
-    offset: int = 0,
+    params: PageParams = Depends(_watchlist_page_params),
 ):
     criteria = load_criteria(CRITERIA_PATH)
     watch_products = criteria.watchlist.products
@@ -107,10 +127,12 @@ async def filter_watchlist_list(
                 narrowed.append(ProductGroup(g.clean_name, g.brand, g.category, g.subcategory, watched_vols))
         groups = narrowed
 
+    page = _slice_page(groups, params.page, params.size)
     return templates.TemplateResponse(request, "_watchlist_list.html", {
         "watch_products": watch_products,
         "category_labels": CATEGORY_LABELS,
-        **_paginate(groups, offset, q, category, watchlist_only),
+        "groups": page.items,
+        "next_url": _next_url(page, q, category, watchlist_only),
     })
 
 
