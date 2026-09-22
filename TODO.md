@@ -16,7 +16,8 @@
       Remaining: other cards)
   - [x] Watchlist pagination — `_watchlist_list.html`'s hand-rolled "load more" button →
         `gth_pagination` (`greentechhub_ui/components/pagination.html`). `watchlist.py`'s
-        `_paginate()` offset-slicing logic is unchanged — only the rendering moved.
+        offset-slicing logic has since moved to page/size — see `greentechhub-fastapi` adoption
+        below.
   - [ ] Other cards — spot-check `templates/deal.html` / `templates/dashboard.html` for any
         remaining non-migrated card markup
   - [x] Health tables — `_scrape_runs_table.html`, `_notification_log_table.html` →
@@ -37,8 +38,17 @@ business styling, not theme duplication.
       DB check (`check_bottlebot_db`) against BottleBot's sync SQLAlchemy engine via
       `asyncio.to_thread`, since `greentechhub-core`'s `check_database` expects an async-shaped
       engine.
-- [ ] Swap the ad-hoc `_paginate()` offset-slicing (`src/web/routes/watchlist.py:29-51`) for the
-      `query` / `PageParams` adapter
+- [x] Swap the ad-hoc `_paginate()` offset-slicing for the `query` / `PageParams` adapter — done
+      2026-09-22: `/watchlist/list` now takes `PageParams` (`page`/`size`, validated `ge=1`/
+      `1-100`) instead of an unvalidated `offset`. Only the `page`/`size` half of the adapter
+      applies — `sort`/`filter`/`to_page_request()` are unused, since BottleBot filters/groups
+      `Product` rows into `ProductGroup`s in Python before pagination, not against a
+      directly-queryable source those could resolve against. Neither `Page` nor `PageParams` has
+      any concept of a `next_url`, so `watchlist.py` still builds that by hand for `gth_pagination`
+      (`_slice_page`/`_next_url`) — the glue BottleBot needed didn't get any smaller, just
+      switched units from offset to page/size. `WATCHLIST_PAGE_SIZE` stays the default page size
+      via a small `_watchlist_page_params` dependency (reads it at call time, not baked into a
+      `Query(...)` default, so it stays test-monkeypatchable).
 - [ ] Adopt `register_auth`, if/when BottleBot grows a login (lowest priority — deferred upstream too)
 
 ## Packaging / deployment follow-up
